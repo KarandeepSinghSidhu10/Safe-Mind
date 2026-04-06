@@ -1,0 +1,2140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeMind Dashboard</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --bg: #0f111a;
+            --card: #181b25;
+            --card-hover: #1f2330;
+            --border: #262b3b;
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --blue: #3b82f6;
+            --blue-bg: rgba(59, 130, 246, 0.1);
+            --red: #ef4444;
+            --red-bg: rgba(239, 68, 68, 0.1);
+            --green: #10b981;
+            --green-bg: rgba(16, 185, 129, 0.1);
+            --yellow: #f59e0b;
+            --yellow-bg: rgba(245, 158, 11, 0.1);
+            --purple: #8b5cf6;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            font-size: 14px;
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+        .sidebar {
+            width: 70px;
+            background-color: var(--bg);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            z-index: 10;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 20px;
+            color: var(--blue);
+            margin-bottom: 40px;
+            letter-spacing: -1px;
+        }
+
+        .nav-items {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+            align-items: center;
+        }
+
+        .nav-item {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--muted);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .nav-item:hover { color: var(--text); background: var(--card); }
+        .nav-item.active { color: var(--blue); background: var(--blue-bg); }
+
+        .sidebar-bottom { margin-top: auto; }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .topbar {
+            height: 70px;
+            padding: 0 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .topbar-left { display: flex; align-items: center; gap: 20px; }
+        .page-title { font-size: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .badge.safe { background: var(--green-bg); color: var(--green); border: 1px solid rgba(16, 185, 129, 0.2); }
+        .badge.calm { background: var(--blue-bg); color: var(--blue); border: 1px solid rgba(59, 130, 246, 0.2); }
+        
+        .btn-sos {
+            background: var(--red-bg);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-sos:hover { background: var(--red); color: white; }
+
+        .dashboard-area {
+            flex: 1;
+            padding: 24px 30px;
+            overflow-y: auto;
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        .dashboard-area.active { display: flex; flex-direction: column; gap: 20px; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .grid-2-col { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; }
+        .grid-3-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            font-size: 12px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .voice-ui {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            padding: 20px 0;
+        }
+
+        .mic-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: var(--blue-bg);
+            border: 2px solid var(--blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--blue);
+            cursor: pointer;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .mic-btn::before {
+            content: '';
+            position: absolute;
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            background: var(--blue);
+            opacity: 0;
+            z-index: -1;
+            transition: all 0.3s;
+        }
+
+        .mic-btn.listening::before {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.4; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+
+        .voice-status { color: var(--muted); margin-bottom: 8px; font-size: 13px; }
+        .voice-result { color: var(--text); font-weight: 500; }
+
+        .emotion-ui {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+            flex: 1;
+        }
+
+        .score-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            /* background is now set inline */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .score-circle::after {
+            content: '';
+            position: absolute;
+            width: 100px; height: 100px;
+            background: var(--card);
+            border-radius: 50%;
+        }
+
+        .score-value {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+        }
+        .score-value h2 { font-size: 32px; font-weight: 700; color: var(--blue); line-height: 1; }
+        .score-value span { font-size: 12px; color: var(--muted); }
+
+        .emotion-bars { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+        .bar-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+        .bar-label { width: 50px; color: var(--muted); }
+        .bar-track { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 3px; }
+        .bar-val { width: 20px; text-align: right; color: var(--text); }
+
+        .chat-container { display: flex; flex-direction: column; height: 300px; }
+        .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-right: 10px; margin-bottom: 16px; }
+        
+        .msg { max-width: 80%; padding: 12px 16px; border-radius: 12px; line-height: 1.5; font-size: 13px; }
+        .msg.ai { background: var(--bg); border: 1px solid var(--border); align-self: flex-start; border-bottom-left-radius: 4px; }
+        .msg.user { background: var(--blue-bg); border: 1px solid rgba(59, 130, 246, 0.2); color: var(--text); align-self: flex-end; border-bottom-right-radius: 4px; }
+
+        .chat-input-area {
+            display: flex;
+            gap: 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 8px 12px;
+        }
+        .chat-input-area input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text);
+            outline: none;
+            font-size: 13px;
+        }
+        .chat-input-area button {
+            background: var(--blue);
+            color: white;
+            border: none;
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .nearby-list { display: flex; flex-direction: column; gap: 12px; }
+        .nearby-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+        .nearby-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+        .nearby-info { flex: 1; }
+        .nearby-info h4 { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+        .nearby-info p { font-size: 11px; color: var(--muted); }
+        
+        .tag { padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; letter-spacing: 0.5px; }
+        .tag.high { background: var(--red-bg); color: var(--red); }
+        .tag.med { background: var(--yellow-bg); color: var(--yellow); }
+        .tag.safe { background: var(--green-bg); color: var(--green); }
+
+        .stat-card { display: flex; align-items: center; gap: 16px; }
+        .stat-icon { width: 48px; height: 48px; border-radius: 12px; background: var(--bg); display: flex; align-items: center; justify-content: center; color: var(--blue); border: 1px solid var(--border); }
+        .stat-details h3 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+        .stat-details p { font-size: 12px; color: var(--muted); }
+        .stat-details .highlight { color: var(--blue); font-weight: 500; }
+
+        .breathing-ui { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 20px 0; }
+        .breathe-circle {
+            width: 100px; height: 100px;
+            border-radius: 50%;
+            border: 2px solid var(--blue);
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 30px;
+            position: relative;
+            transition: all 4s ease-in-out;
+        }
+        .breathe-circle::before {
+            content: ''; position: absolute; width: 100%; height: 100%;
+            background: var(--blue-bg); border-radius: 50%;
+            transition: all 4s ease-in-out;
+        }
+        .breathe-circle.inhale { transform: scale(1.5); }
+        .breathe-circle.inhale::before { background: rgba(59, 130, 246, 0.3); }
+        .breathe-text { position: absolute; font-weight: 500; color: var(--text); z-index: 1; font-size: 12px; }
+        
+        .btn-primary {
+            background: var(--blue); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 500; cursor: pointer; transition: 0.2s;
+        }
+        .btn-primary:hover { background: #2563eb; }
+
+        .map-container {
+            height: 300px; background: var(--bg); border-radius: 12px; border: 1px solid var(--border);
+            position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center;
+        }
+
+        .report-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+        .report-type {
+            background: var(--bg); border: 1px solid var(--border); padding: 16px; border-radius: 12px;
+            display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer; transition: 0.2s;
+        }
+        .report-type:hover, .report-type.active { border-color: var(--blue); background: var(--blue-bg); color: var(--blue); }
+        .report-type i { color: var(--muted); }
+        .report-type:hover i, .report-type.active i { color: var(--blue); }
+        
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 12px; text-transform: uppercase; }
+        .form-control { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 12px; border-radius: 8px; outline: none; font-size: 14px; }
+        .form-control:focus { border-color: var(--blue); }
+        textarea.form-control { resize: vertical; min-height: 80px; }
+
+        .toast-container { position: fixed; top: 20px; right: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 100; }
+        .toast {
+            background: var(--card); border: 1px solid var(--border); padding: 16px 20px; border-radius: 12px;
+            display: flex; align-items: flex-start; gap: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            max-width: 350px;
+        }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .toast.closing { animation: slideOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes slideOut { to { transform: translateX(100%); opacity: 0; } }
+        
+        .toast-icon { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .toast-content h4 { font-size: 14px; margin-bottom: 4px; }
+        .toast-content p { font-size: 12px; color: var(--muted); line-height: 1.4; }
+        
+        .toast.sos { border-color: var(--red); }
+        .toast.sos .toast-icon { background: var(--red-bg); color: var(--red); }
+        .toast.info { border-color: var(--blue); }
+        .toast.info .toast-icon { background: var(--blue-bg); color: var(--blue); }
+
+        /* Modals */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px);
+            display: none; align-items: center; justify-content: center; z-index: 50;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-content {
+            background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+            width: 90%; max-width: 500px; padding: 24px; position: relative;
+            animation: modalIn 0.3s ease;
+        }
+        @keyframes modalIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .modal-close {
+            position: absolute; top: 16px; right: 16px; background: transparent; border: none;
+            color: var(--muted); cursor: pointer; transition: 0.2s;
+        }
+        .modal-close:hover { color: var(--text); }
+        .modal-title { font-size: 18px; font-weight: 600; margin-bottom: 20px; }
+        
+        /* Journal Entries Enhanced */
+        .journal-entries { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-top: 20px; padding-right: 5px; }
+        .journal-entry { background: linear-gradient(145deg, var(--card), var(--bg)); padding: 16px; border-radius: 12px; border: 1px solid var(--border); border-left: 4px solid var(--blue); box-shadow: 0 4px 15px rgba(0,0,0,0.1); position: relative; transition: transform 0.2s; }
+        .journal-entry:hover { transform: translateY(-2px); }
+        .journal-entry .mood-emoji { position: absolute; top: 16px; right: 16px; font-size: 24px; }
+        .journal-entry p { font-size: 13px; line-height: 1.6; color: var(--text); margin-top: 8px; }
+        .journal-date { font-size: 11px; color: var(--muted); font-weight: 500; }
+
+        /* Mood Selector */
+        .mood-selector { display: flex; gap: 15px; margin-bottom: 20px; justify-content: center; }
+        .mood-btn { font-size: 28px; cursor: pointer; padding: 10px; border-radius: 50%; background: var(--bg); border: 2px solid transparent; transition: 0.2s; filter: grayscale(100%); opacity: 0.5; user-select: none; }
+        .mood-btn:hover { transform: scale(1.1); }
+        .mood-btn.active { border-color: var(--blue); filter: grayscale(0%); opacity: 1; background: var(--blue-bg); }
+
+        /* Duration Selector */
+        .duration-btn { background: var(--bg); color: var(--text); border: 1px solid var(--border); flex: 1; padding: 8px; border-radius: 8px; cursor: pointer; font-weight: 500; transition: 0.2s; }
+        .duration-btn:hover { background: var(--card-hover); }
+        .duration-btn.active { background: var(--blue-bg); color: var(--blue); border-color: var(--blue); }
+
+        /* Incident Marker Animations */
+        @keyframes markerPopIn {
+            0% { transform: scale(0); opacity: 0; }
+            60% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .incident-marker-icon > div {
+            animation: markerPopIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .incident-marker-icon:hover > div {
+            transform: scale(1.4);
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+    </style>
+</head>
+<body>
+
+    <aside class="sidebar">
+        <div class="logo">SM</div>
+        <div class="nav-items">
+            <div class="nav-item active" data-tab="overview" title="Overview"><i data-lucide="layout-grid"></i></div>
+            <div class="nav-item" data-tab="wellness" title="Wellness"><i data-lucide="heart"></i></div>
+            <div class="nav-item" data-tab="safety" title="Safe Map"><i data-lucide="map-pin"></i></div>
+            <div class="nav-item" data-tab="report" title="Report"><i data-lucide="edit-2"></i></div>
+        </div>
+        <div class="sidebar-bottom">
+            <div class="nav-item" data-tab="profile" title="Profile"><i data-lucide="user"></i></div>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <header class="topbar">
+            <div class="topbar-left">
+                <h1 class="page-title" id="page-title">Overview</h1>
+                <div class="badge safe"><i data-lucide="shield-check" size="14"></i> Safe zone</div>
+            </div>
+            <div class="topbar-left">
+                <div class="badge calm"><i data-lucide="activity" size="14"></i> Calm - 72%</div>
+                <button class="btn-sos" onclick="triggerSOS()"><i data-lucide="radio" size="16"></i> SOS</button>
+            </div>
+        </header>
+
+        <!-- OVERVIEW TAB -->
+        <div id="tab-overview" class="dashboard-area active">
+            <div class="grid-2-col">
+                <div class="card">
+                    <div class="card-header"><span>Calm AI - Voice Check-in</span></div>
+                    <div class="voice-ui">
+                        <div class="mic-btn" id="ov-mic" onclick="simulateVoice('ov')">
+                            <i data-lucide="mic" size="32"></i>
+                        </div>
+                        <div class="voice-status" id="ov-status">Tap to start voice check-in</div>
+                        <div class="voice-result" id="ov-result">AI detects stress from your voice</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header"><span>Emotional State - Today</span></div>
+                    <div class="emotion-ui">
+                        <div class="score-circle" id="emotion-score-circle" style="background: conic-gradient(var(--blue) 72%, var(--border) 0);">
+                            <div class="score-value">
+                                <h2 id="emotion-score-val">72</h2>
+                                <span id="emotion-score-label">Calm</span>
+                            </div>
+                        </div>
+                        <div class="emotion-bars">
+                            <div class="bar-row"><span class="bar-label">Stress</span><div class="bar-track"><div class="bar-fill" id="emotion-stress-fill" style="width: 28%; background: var(--red);"></div></div><span class="bar-val" id="emotion-stress-val">28</span></div>
+                            <div class="bar-row"><span class="bar-label">Anxiety</span><div class="bar-track"><div class="bar-fill" id="emotion-anxiety-fill" style="width: 25%; background: var(--yellow);"></div></div><span class="bar-val" id="emotion-anxiety-val">25</span></div>
+                            <div class="bar-row"><span class="bar-label">Energy</span><div class="bar-track"><div class="bar-fill" id="emotion-energy-fill" style="width: 64%; background: var(--green);"></div></div><span class="bar-val" id="emotion-energy-val">64</span></div>
+                            <div class="bar-row"><span class="bar-label">Focus</span><div class="bar-track"><div class="bar-fill" id="emotion-focus-fill" style="width: 71%; background: var(--blue);"></div></div><span class="bar-val" id="emotion-focus-val">71</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-2-col">
+                <div class="card">
+                    <div class="card-header"><span>SafeMind AI</span> <span class="badge safe" style="font-size: 10px; padding: 2px 8px;">+ Online</span></div>
+                    <div class="chat-container">
+                        <div class="chat-messages" id="chat-msgs">
+                            <div class="msg ai">Hey! I've analyzed your voice and environment. You seem slightly stressed. Want to try a quick breathing exercise? 🌬️</div>
+                            <div class="msg user">Yeah I've been feeling a bit overwhelmed with college work</div>
+                            <div class="msg ai">I totally get that. Also heads up — there's a <strong>moderate incident</strong> reported 0.3km from you. I'd suggest the Library route instead today. Want me to guide you? 🗺️</div>
+                        </div>
+                        <div class="chat-input-area">
+                            <input type="text" id="chat-input" placeholder="Talk to SafeMind AI..." onkeypress="handleChat(event, 'chat-input', 'chat-msgs')">
+                            <button onclick="sendChat('chat-input', 'chat-msgs')"><i data-lucide="send" size="16"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header"><span>Nearby</span> <span style="color: var(--muted); text-transform: none;">2 active</span></div>
+                    <div class="nearby-list">
+                        <div class="nearby-item">
+                            <div class="nearby-icon" style="background: var(--red-bg); color: var(--red);"><i data-lucide="alert-triangle" size="18"></i></div>
+                            <div class="nearby-info"><h4>Street harassment</h4><p>0.3 km · 8 min ago</p></div>
+                            <div class="tag high">HIGH</div>
+                        </div>
+                        <div class="nearby-item">
+                            <div class="nearby-icon" style="background: var(--yellow-bg); color: var(--yellow);"><i data-lucide="lightbulb-off" size="18"></i></div>
+                            <div class="nearby-info"><h4>Poor lighting area</h4><p>0.8 km · 25 min ago</p></div>
+                            <div class="tag med">MED</div>
+                        </div>
+                        <div class="nearby-item">
+                            <div class="nearby-icon" style="background: var(--green-bg); color: var(--green);"><i data-lucide="shield-check" size="18"></i></div>
+                            <div class="nearby-info"><h4>Safe campus zone</h4><p>Verified safe</p></div>
+                            <div class="tag safe">SAFE</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-3-col">
+                <div class="card stat-card">
+                    <div class="stat-icon"><i data-lucide="calendar-check"></i></div>
+                    <div class="stat-details"><h3>7</h3><p>Check-ins this week <span class="highlight">+2 more than last week</span></p></div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-icon" style="color: var(--yellow);"><i data-lucide="map-pin"></i></div>
+                    <div class="stat-details"><h3>3</h3><p>Incidents in your area <span style="color: var(--yellow);">1 new today</span></p></div>
+                </div>
+                <div class="card stat-card">
+                    <div class="stat-icon" style="color: var(--green);"><i data-lucide="activity"></i></div>
+                    <div class="stat-details"><h3>84%</h3><p>Weekly calm score <span style="color: var(--green);">+6% from last week</span></p></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- WELLNESS TAB -->
+        <div id="tab-wellness" class="dashboard-area">
+            <div class="grid-2-col">
+                <div class="card">
+                    <div class="card-header"><span>Voice Emotion Analysis</span></div>
+                    <div class="voice-ui">
+                        <div class="mic-btn" id="wl-mic" onclick="simulateVoice('wl')"><i data-lucide="mic" size="32"></i></div>
+                        <div class="voice-status" id="wl-status">Tap to analyze your voice tone</div>
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <span class="badge calm">Calm - 72%</span>
+                            <span class="badge" style="background: var(--bg); border: 1px solid var(--border); color: var(--text);">Mid stress - 20%</span>
+                            <span class="badge" style="background: var(--bg); border: 1px solid var(--border); color: var(--text);">Focused</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card" style="flex: 1;">
+                    <div class="card-header"><span>AI Therapy Chat</span> <span class="badge" style="background: var(--bg); border: 1px solid var(--border); color: var(--text);">CBT-based</span></div>
+                    <div class="chat-container" style="height: 100%;">
+                        <div class="chat-messages" id="therapy-msgs" style="flex: 1;">
+                            <div class="msg ai">Hello! I'm your SafeMind wellness companion. I'm here to listen and help you work through whatever you're feeling. What's on your mind today? 💙</div>
+                        </div>
+                        <div class="chat-input-area">
+                            <input type="text" id="therapy-input" placeholder="Share how you're feeling..." onkeypress="handleChat(event, 'therapy-input', 'therapy-msgs')">
+                            <button onclick="sendChat('therapy-input', 'therapy-msgs')"><i data-lucide="send" size="16"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid-3-col">
+                <div class="card" onclick="openModal('meditate-modal')" style="align-items: center; padding: 15px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='var(--card-hover)'" onmouseout="this.style.background='var(--card)'">
+                    <i data-lucide="flower-2" style="color: var(--yellow); margin-bottom: 8px;"></i>
+                    <h4 style="font-size: 14px;">Meditate</h4>
+                    <p style="font-size: 11px; color: var(--muted);">Guided breathing</p>
+                </div>
+                <div class="card" onclick="openModal('journal-modal')" style="align-items: center; padding: 15px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='var(--card-hover)'" onmouseout="this.style.background='var(--card)'">
+                    <i data-lucide="book" style="color: var(--blue); margin-bottom: 8px;"></i>
+                    <h4 style="font-size: 14px;">Journal</h4>
+                    <p style="font-size: 11px; color: var(--muted);">Daily reflection</p>
+                </div>
+                <div class="card" onclick="triggerSOS()" style="align-items: center; padding: 15px; cursor: pointer; transition: 0.2s;" onmouseover="this.style.background='var(--card-hover)'" onmouseout="this.style.background='var(--card)'">
+                    <i data-lucide="life-buoy" style="color: var(--red); margin-bottom: 8px;"></i>
+                    <h4 style="font-size: 14px;">Get Help</h4>
+                    <p style="font-size: 11px; color: var(--muted);">Crisis support</p>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <div class="card-header"><span>Recent Journal Entries</span></div>
+                <div class="journal-entries" id="journal-entries-list" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-top: 0;">
+                    <div style="color: var(--muted); font-size: 12px; text-align: center; padding: 20px;">No entries yet. Start journaling!</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SAFETY TAB -->
+        <div id="tab-safety" class="dashboard-area">
+            <div class="card" style="padding: 0; overflow: hidden; flex-shrink: 0; display: flex; flex-direction: column;">
+                <div class="card-header" style="padding: 20px 20px 0 20px; flex-shrink: 0;">
+                    <span>Live Safety Map</span> 
+                    <span class="badge" style="background: var(--bg); border: 1px solid var(--border); color: var(--text);">Your Location</span>
+                </div>
+                <div id="actual-map" style="margin: 20px; height: 500px; min-height: 500px; flex-shrink: 0; border-radius: 12px; overflow: hidden; z-index: 1; position: relative;">
+                    <div style="color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 10px;">
+                        <i data-lucide="loader" class="spin"></i>
+                        <p>Locating you...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="flex-shrink: 0;">
+                <div class="card-header" style="margin-bottom: 12px;"><span>Where do you want to go?</span></div>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="destination-input" class="form-control" placeholder="Enter destination (e.g., Library, Dorms)...">
+                    <button class="btn-primary" onclick="findSafeRoute()" style="white-space: nowrap; display: flex; align-items: center; gap: 6px;"><i data-lucide="navigation" size="16"></i> Find Safe Route</button>
+                </div>
+            </div>
+
+            <div class="grid-2-col" style="flex-shrink: 0;">
+                <div class="card" id="incidents-card" style="position: relative; overflow: hidden; min-height: 350px;">
+                    <div class="card-header"><span id="incidents-card-title">All Incidents</span></div>
+                    
+                    <!-- List View -->
+                    <div id="incidents-list-view" class="nearby-list" style="transition: transform 0.3s, opacity 0.3s; width: 100%;">
+                        <!-- Populated by JS -->
+                    </div>
+
+                    <!-- Detail View -->
+                    <div id="incidents-detail-view" style="position: absolute; top: 50px; left: 0; width: 100%; height: calc(100% - 50px); background: var(--card); padding: 0 20px 20px 20px; transform: translateX(100%); opacity: 0; transition: transform 0.3s, opacity 0.3s; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; pointer-events: none;">
+                        <button onclick="showIncidentsList()" style="background: transparent; border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; align-self: flex-start;">
+                            <i data-lucide="arrow-left" size="14"></i> Back to List
+                        </button>
+                        
+                        <div style="display: flex; align-items: flex-start; gap: 12px;">
+                            <div id="detail-icon-container" class="nearby-icon" style="width: 48px; height: 48px; flex-shrink: 0;"></div>
+                            <div>
+                                <h3 id="detail-title" style="font-size: 16px; margin-bottom: 4px;">Incident Title</h3>
+                                <div id="detail-tag" class="tag">SEVERITY</div>
+                            </div>
+                        </div>
+                        
+                        <div style="background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
+                            <p id="detail-desc" style="color: var(--muted); font-size: 13px; line-height: 1.5; margin-bottom: 12px;">Description</p>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border-top: 1px solid var(--border); padding-top: 12px;">
+                                <div>
+                                    <div style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Reported</div>
+                                    <div id="detail-time" style="font-size: 12px; font-weight: 500;">10 mins ago</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Distance</div>
+                                    <div id="detail-distance" style="font-size: 12px; font-weight: 500;">0.8 miles</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="incident-ai-analysis" style="background: linear-gradient(145deg, var(--card-hover), var(--bg)); padding: 12px; border-radius: 8px; border: 1px solid var(--border); display: none;">
+                            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                                <i data-lucide="sparkles" size="14" style="color: var(--blue);"></i>
+                                <span style="font-size: 12px; font-weight: 600; color: var(--text);">AI Analysis</span>
+                            </div>
+                            <div id="incident-ai-status" style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">Analyzing incident...</div>
+                            <div id="incident-ai-result" style="display: none;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                    <span style="font-size: 12px; color: var(--muted);">Predicted Severity:</span>
+                                    <span id="incident-ai-severity" style="font-size: 12px; font-weight: bold;"></span>
+                                </div>
+                                <div style="font-size: 12px; color: var(--muted); margin-bottom: 4px;">Potential Risks:</div>
+                                <ul id="incident-ai-risks" style="margin: 0; padding-left: 20px; font-size: 12px; color: var(--text); line-height: 1.4;">
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <button class="btn-primary" style="margin-top: auto; width: 100%;" onclick="routeToCurrentIncident()">Route to Incident</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><span>AI Route Suggestion</span></div>
+                    <div id="route-suggestion-content" style="display: flex; flex-direction: column; gap: 20px;">
+                        <div style="background: var(--bg); border: 1px solid var(--border); padding: 16px; border-radius: 12px;">
+                            <p style="color: var(--muted); font-size: 12px; margin-bottom: 8px;">Recommended safe route</p>
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <div style="display: flex; align-items: center; gap: 10px; font-weight: 500;">
+                                    <i data-lucide="map-pin" style="color: var(--blue);" size="18"></i> Via Library Road
+                                </div>
+                                <div class="tag safe">SAFE</div>
+                            </div>
+                        </div>
+                        <div style="background: var(--bg); border: 1px solid var(--border); padding: 16px; border-radius: 12px;">
+                            <p style="color: var(--muted); font-size: 12px; margin-bottom: 8px;">Avoid this route</p>
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <div style="display: flex; align-items: center; gap: 10px; font-weight: 500;">
+                                    <i data-lucide="alert-circle" style="color: var(--red);" size="18"></i> Sector 15 Main Rd
+                                </div>
+                                <div class="tag high">RISK</div>
+                            </div>
+                            <p style="font-size: 12px; color: var(--red);">Active high-risk report nearby</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- REPORT TAB -->
+        <div id="tab-report" class="dashboard-area">
+            <div class="grid-2-col">
+                <div class="card">
+                    <div class="card-header"><span>Report an Incident</span></div>
+                    <div class="report-grid">
+                        <div class="report-type active"><i data-lucide="alert-triangle"></i><span>Harassment</span></div>
+                        <div class="report-type"><i data-lucide="lightbulb-off"></i><span>Poor lighting</span></div>
+                        <div class="report-type"><i data-lucide="eye"></i><span>Suspicious</span></div>
+                        <div class="report-type"><i data-lucide="cone"></i><span>Road hazard</span></div>
+                        <div class="report-type"><i data-lucide="volume-2"></i><span>Noise</span></div>
+                        <div class="report-type"><i data-lucide="more-horizontal"></i><span>Other</span></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Location</label>
+                        <input type="text" id="report-location" class="form-control" value="Current Location (auto-detected)">
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea id="report-desc" class="form-control" placeholder="Describe what happened..."></textarea>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px;">
+                        <input type="checkbox" id="anon" checked>
+                        <label for="anon" style="color: var(--muted); font-size: 13px;">Report anonymously</label>
+                    </div>
+                    <button class="btn-primary" style="width: 100%; padding: 14px;" onclick="showReportConfirmation()">Submit Report</button>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <div class="card">
+                        <div class="card-header"><span>How AI helps your report</span></div>
+                        <div style="display: flex; flex-direction: column; gap: 16px;">
+                            <div style="display: flex; gap: 12px;">
+                                <i data-lucide="zap" style="color: var(--purple);" size="20"></i>
+                                <div><h4 style="font-size: 13px; margin-bottom: 4px;">Auto-severity rating</h4><p style="font-size: 12px; color: var(--muted);">AI classifies urgency from your description</p></div>
+                            </div>
+                            <div style="display: flex; gap: 12px;">
+                                <i data-lucide="git-merge" style="color: var(--blue);" size="20"></i>
+                                <div><h4 style="font-size: 13px; margin-bottom: 4px;">Cluster detection</h4><p style="font-size: 12px; color: var(--muted);">Finds patterns with past reports nearby</p></div>
+                            </div>
+                            <div style="display: flex; gap: 12px;">
+                                <i data-lucide="bell-ring" style="color: var(--yellow);" size="20"></i>
+                                <div><h4 style="font-size: 13px; margin-bottom: 4px;">Smart alerts</h4><p style="font-size: 12px; color: var(--muted);">Notifies nearby users with safe route suggestions</p></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header"><span>Emergency Contacts</span></div>
+                        <div class="nearby-list" id="report-emergency-contacts">
+                            <div class="nearby-item" style="padding: 10px;">
+                                <div class="nearby-icon" style="background: var(--bg);"><i data-lucide="shield" size="18"></i></div>
+                                <div class="nearby-info"><h4>Police</h4><p>100</p></div>
+                                <button class="btn-primary" style="padding: 6px 12px; font-size: 12px;">Call</button>
+                            </div>
+                            <div class="nearby-item" style="padding: 10px;">
+                                <div class="nearby-icon" style="background: var(--bg);"><i data-lucide="ambulance" size="18"></i></div>
+                                <div class="nearby-info"><h4>Ambulance</h4><p>108</p></div>
+                                <button class="btn-primary" style="padding: 6px 12px; font-size: 12px;">Call</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PROFILE TAB -->
+        <div id="tab-profile" class="dashboard-area">
+            <div class="grid-2-col">
+                <div class="card">
+                    <div class="card-header"><span>Profile Settings</span></div>
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" class="form-control" id="profile-name" value="Alex Doe">
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" class="form-control" id="profile-email" value="alex@example.com">
+                    </div>
+                    
+                    <div class="card-header" style="margin-top: 30px; margin-bottom: 10px;"><span>Emergency Contacts</span></div>
+                    <p style="font-size: 12px; color: var(--muted); margin-bottom: 15px;">SOS calls Contact #1. Messages are sent to all.</p>
+                    
+                    <div id="emergency-contacts-list" style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 15px;">
+                        <!-- Contacts rendered here -->
+                    </div>
+                    
+                    <button class="btn-primary" style="background: var(--bg); border: 1px solid var(--border); color: var(--text); width: 100%; margin-bottom: 20px;" onclick="addEmergencyContact()">+ Add Contact</button>
+
+                    <button class="btn-primary" style="width: 100%;" onclick="saveProfile()">Save Changes</button>
+                </div>
+                <div class="card">
+                    <div class="card-header"><span>Account Security</span></div>
+                    <div class="form-group">
+                        <label>Current Password</label>
+                        <input type="password" class="form-control" placeholder="••••••••">
+                    </div>
+                    <div class="form-group">
+                        <label>New Password</label>
+                        <input type="password" class="form-control" placeholder="••••••••">
+                    </div>
+                    <button class="btn-primary" style="background: var(--bg); border: 1px solid var(--border); color: var(--text);">Update Password</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="meditate-modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('meditate-modal')"><i data-lucide="x"></i></button>
+            <h2 class="modal-title">Guided Meditation</h2>
+            <div class="session-options" id="meditation-options" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="duration-btn active" data-duration="60" onclick="setDuration(this, 60)">1 Min</button>
+                <button class="duration-btn" data-duration="180" onclick="setDuration(this, 180)">3 Min</button>
+                <button class="duration-btn" data-duration="300" onclick="setDuration(this, 300)">5 Min</button>
+            </div>
+            <div id="meditation-timer" style="text-align: center; font-size: 32px; font-weight: 700; color: var(--blue); margin-bottom: 20px; font-variant-numeric: tabular-nums;">01:00</div>
+            <div class="breathing-ui">
+                <div class="breathe-circle" id="breathe-circle">
+                    <span class="breathe-text" id="breathe-text">Ready</span>
+                </div>
+                <button class="btn-primary" id="btn-breathe" onclick="toggleBreathing()">Start Exercise</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="journal-modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('journal-modal')"><i data-lucide="x"></i></button>
+            <h2 class="modal-title">Daily Journal</h2>
+            <div class="mood-selector" id="mood-selector">
+                <div class="mood-btn active" data-mood="😁" onclick="setMood(this)">😁</div>
+                <div class="mood-btn" data-mood="😌" onclick="setMood(this)">😌</div>
+                <div class="mood-btn" data-mood="😐" onclick="setMood(this)">😐</div>
+                <div class="mood-btn" data-mood="😔" onclick="setMood(this)">😔</div>
+                <div class="mood-btn" data-mood="😫" onclick="setMood(this)">😫</div>
+            </div>
+            <div class="form-group">
+                <textarea class="form-control" id="journal-input" placeholder="Write down your thoughts..."></textarea>
+            </div>
+            <button class="btn-primary" style="width: 100%;" onclick="saveJournal()">Save Entry</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="report-confirm-modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('report-confirm-modal')"><i data-lucide="x"></i></button>
+            <h2 class="modal-title">Confirm Report</h2>
+            <div style="margin-bottom: 20px; color: var(--text); background: var(--bg); padding: 16px; border-radius: 8px; border: 1px solid var(--border);">
+                <p style="margin-bottom: 8px;"><strong>Type:</strong> <span id="confirm-report-type" style="color: var(--blue);"></span></p>
+                <p style="margin-bottom: 8px;"><strong>Location:</strong> <span id="confirm-report-location"></span></p>
+                <p style="margin-bottom: 8px;"><strong>Description:</strong> <span id="confirm-report-desc"></span></p>
+                <p><strong>Anonymous:</strong> <span id="confirm-report-anon"></span></p>
+            </div>
+            <p style="font-size: 12px; color: var(--muted); margin-bottom: 20px;">Please verify the details above. False reporting may result in account suspension.</p>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-primary" style="flex: 1; background: var(--card-hover); color: var(--text);" onclick="closeModal('report-confirm-modal')">Cancel</button>
+                <button class="btn-primary" style="flex: 1;" onclick="submitReport()">Confirm & Submit</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="journal-delete-confirm-modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('journal-delete-confirm-modal')"><i data-lucide="x"></i></button>
+            <h2 class="modal-title">Delete Journal Entry</h2>
+            <p style="margin-bottom: 20px; color: var(--text);">Are you sure you want to delete this journal entry? This action cannot be undone.</p>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-primary" style="flex: 1; background: var(--card-hover); color: var(--text);" onclick="closeModal('journal-delete-confirm-modal')">Cancel</button>
+                <button class="btn-primary" style="flex: 1; background: var(--red); color: white;" onclick="confirmDeleteJournal()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="login-screen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 1000; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+        <div class="logo" style="font-size: 48px; margin-bottom: 20px;">SafeMind</div>
+        <p style="color: var(--muted); margin-bottom: 40px; text-align: center; max-width: 300px;">Your personal safety and wellness companion.</p>
+        <button class="btn-primary" style="display: flex; align-items: center; gap: 10px; font-size: 16px; padding: 12px 24px;" onclick="loginWithGoogle()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            Sign in with Google
+        </button>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        lucide.createIcons();
+
+        // Global Location Tracking
+        let globalLat = null;
+        let globalLng = null;
+        
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    globalLat = position.coords.latitude;
+                    globalLng = position.coords.longitude;
+                    realLocationFound = true;
+                    
+                    if (userMarkerRef) {
+                        userMarkerRef.setLatLng([globalLat, globalLng]);
+                    }
+                    
+                    if (mapInitialized && map) {
+                        // Only set view on the first location update to avoid snapping the map away from user
+                        if (!window.initialMapCentered) {
+                            map.setView([globalLat, globalLng], 15);
+                            window.initialMapCentered = true;
+                            updateIncidentMarkers();
+                        }
+                    }
+                },
+                (error) => {
+                    console.warn("Global Geolocation error:", error);
+                },
+                { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 }
+            );
+        }
+
+        // Authentication
+        async function loginWithGoogle() {
+            try {
+                const res = await fetch('/api/auth/url');
+                const data = await res.json();
+                
+                const authWindow = window.open(data.url, 'oauth_popup', 'width=600,height=700');
+                
+                if (!authWindow) {
+                    showToast('Popup Blocked', 'Please allow popups to sign in with Google.', 'sos');
+                }
+            } catch (err) {
+                console.error('Failed to get auth URL', err);
+                showToast('Login Error', 'Failed to initiate login.', 'sos');
+            }
+        }
+
+        window.addEventListener('message', async (event) => {
+            if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+                document.getElementById('login-screen').style.display = 'none';
+                await loadProfile();
+                await loadJournals();
+                await loadIncidents();
+                showToast('Welcome', `Signed in as ${document.getElementById('profile-name').value}`, 'info');
+            }
+        });
+
+        // Profile & Emergency Contacts
+        let emergencyContacts = [];
+
+        async function loadProfile() {
+            try {
+                const res = await fetch('/api/profile');
+                const profile = await res.json();
+                
+                document.getElementById('profile-name').value = profile.name || '';
+                document.getElementById('profile-email').value = profile.email || '';
+                
+                emergencyContacts = profile.contacts || [];
+                renderEmergencyContacts();
+                renderReportEmergencyContacts();
+            } catch (err) {
+                console.error('Failed to load profile', err);
+            }
+        }
+
+        function renderEmergencyContacts() {
+            const list = document.getElementById('emergency-contacts-list');
+            if (!list) return;
+            list.innerHTML = '';
+            
+            emergencyContacts.forEach((contact, index) => {
+                const div = document.createElement('div');
+                div.className = 'contact-edit-item';
+                div.style.display = 'flex';
+                div.style.gap = '10px';
+                div.style.alignItems = 'center';
+                
+                div.innerHTML = `
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
+                        <input type="text" class="form-control contact-name-input" placeholder="Name" value="${contact.name}">
+                        <input type="tel" class="form-control contact-phone-input" placeholder="Phone Number" value="${contact.phone}">
+                    </div>
+                    <button class="btn-primary" style="background: var(--red-bg); color: var(--red); border: none; padding: 10px;" onclick="removeEmergencyContact(${index})">
+                        <i data-lucide="trash-2" size="18"></i>
+                    </button>
+                `;
+                list.appendChild(div);
+            });
+            lucide.createIcons({ root: list });
+        }
+
+        function addEmergencyContact() {
+            emergencyContacts.push({ name: '', phone: '' });
+            renderEmergencyContacts();
+        }
+
+        function removeEmergencyContact(index) {
+            emergencyContacts.splice(index, 1);
+            renderEmergencyContacts();
+        }
+
+        function renderReportEmergencyContacts() {
+            const list = document.getElementById('report-emergency-contacts');
+            if (!list) return;
+            list.innerHTML = '';
+            
+            if (emergencyContacts.length === 0) {
+                list.innerHTML = '<p style="color: var(--muted); font-size: 12px; padding: 10px;">No emergency contacts added.</p>';
+                return;
+            }
+            
+            emergencyContacts.forEach((contact, index) => {
+                const div = document.createElement('div');
+                div.className = 'nearby-item';
+                div.style.padding = '10px';
+                
+                const isPrimary = index === 0;
+                const icon = isPrimary ? 'phone-call' : 'message-square';
+                const actionText = isPrimary ? 'Call' : 'Message';
+                
+                div.innerHTML = `
+                    <div class="nearby-icon" style="background: var(--bg);"><i data-lucide="${icon}" size="18"></i></div>
+                    <div class="nearby-info">
+                        <h4 style="margin: 0; font-size: 14px; color: var(--text);">${contact.name} ${isPrimary ? '<span style="color: var(--blue); font-size: 10px; margin-left: 4px;">(Primary)</span>' : ''}</h4>
+                        <p style="margin: 0; font-size: 12px; color: var(--muted);">${contact.phone}</p>
+                    </div>
+                    <button class="btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="triggerContactAction(${index})">${actionText}</button>
+                `;
+                list.appendChild(div);
+            });
+            lucide.createIcons({ root: list });
+        }
+
+        function triggerContactAction(index) {
+            const contact = emergencyContacts[index];
+            if (index === 0) {
+                showToast('Calling Contact', `Initiating SOS call to ${contact.name} (${contact.phone})...`, 'sos');
+            } else {
+                showToast('Sending Message', `Sending SOS message to ${contact.name} (${contact.phone})...`, 'info');
+            }
+        }
+
+        // Load Journal Entries
+        let journalToDelete = null;
+
+        function promptDeleteJournal(id) {
+            journalToDelete = id;
+            openModal('journal-delete-confirm-modal');
+        }
+
+        async function confirmDeleteJournal() {
+            if (!journalToDelete) return;
+            try {
+                const res = await fetch(`/api/journals/${journalToDelete}`, { method: 'DELETE' });
+                if (res.ok) {
+                    showToast('Deleted', 'Journal entry removed.', 'info');
+                    loadJournals();
+                } else {
+                    showToast('Error', 'Failed to delete entry.', 'sos');
+                }
+            } catch (err) {
+                console.error('Failed to delete journal', err);
+                showToast('Error', 'Failed to delete entry.', 'sos');
+            }
+            closeModal('journal-delete-confirm-modal');
+            journalToDelete = null;
+        }
+
+        async function loadJournals() {
+            try {
+                const res = await fetch('/api/journals');
+                const entries = await res.json();
+                const list = document.getElementById('journal-entries-list');
+                
+                if (entries.length === 0) {
+                    list.innerHTML = '<div style="color: var(--muted); font-size: 12px; text-align: center; padding: 20px;">No entries yet. Start journaling!</div>';
+                    return;
+                }
+                
+                list.innerHTML = '';
+                entries.forEach(entry => {
+                    const div = document.createElement('div');
+                    div.className = 'journal-entry';
+                    div.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div class="journal-date">${entry.date}</div>
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <div style="font-size: 24px;">${entry.mood || '📝'}</div>
+                                <button onclick="promptDeleteJournal(${entry.id})" style="background: none; border: none; color: var(--muted); cursor: pointer; padding: 5px; border-radius: 4px; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'" title="Delete entry">
+                                    <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <p style="margin-top: 10px;">${entry.text}</p>
+                    `;
+                    list.appendChild(div);
+                });
+                lucide.createIcons({ root: list });
+            } catch (err) {
+                console.error('Failed to load journals', err);
+            }
+        }
+
+        // Initialize Data
+        // These will be called after successful login
+        // loadProfile();
+        // loadJournals();
+        // loadIncidents();
+
+        // Tab Switching
+        const navItems = document.querySelectorAll('.nav-item[data-tab]');
+        const dashboardAreas = document.querySelectorAll('.dashboard-area');
+        const pageTitle = document.getElementById('page-title');
+
+        const titles = {
+            'overview': 'Overview',
+            'wellness': 'Wellness',
+            'safety': 'Safe Map',
+            'report': 'Report Incident',
+            'profile': 'Profile Settings'
+        };
+
+        navItems.forEach(item => {
+            item.addEventListener('click', () => {
+                navItems.forEach(n => n.classList.remove('active'));
+                item.classList.add('active');
+                
+                const tabId = item.getAttribute('data-tab');
+                dashboardAreas.forEach(area => area.classList.remove('active'));
+                document.getElementById('tab-' + tabId).classList.add('active');
+                
+                pageTitle.textContent = titles[tabId];
+
+                if (tabId === 'safety') {
+                    if (!mapInitialized) {
+                        initMap();
+                    } else {
+                        setTimeout(() => map.invalidateSize(), 100);
+                    }
+                }
+            });
+        });
+
+        // Report Type Selection
+        const reportTypes = document.querySelectorAll('.report-type');
+        reportTypes.forEach(type => {
+            type.addEventListener('click', () => {
+                reportTypes.forEach(t => t.classList.remove('active'));
+                type.classList.add('active');
+            });
+        });
+
+        // Toasts
+        function showToast(title, message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            const icon = type === 'sos' ? 'alert-triangle' : 'info';
+            toast.innerHTML = `
+                <div class="toast-icon"><i data-lucide="${icon}" size="14"></i></div>
+                <div class="toast-content">
+                    <h4>${title}</h4>
+                    <p>${message}</p>
+                </div>
+            `;
+            container.appendChild(toast);
+            lucide.createIcons({ root: toast });
+            setTimeout(() => {
+                toast.classList.add('closing');
+                setTimeout(() => toast.remove(), 300);
+            }, 5000);
+        }
+
+        async function triggerSOS() {
+            if (emergencyContacts.length === 0) {
+                showToast('SOS Failed', 'No emergency contacts configured. Please add them in Profile.', 'sos');
+                return;
+            }
+            
+            const primary = emergencyContacts[0];
+            showToast('SOS Activated', `Alerting contacts...`, 'sos');
+            
+            let lat = null;
+            let lng = null;
+            
+            if (navigator.geolocation) {
+                try {
+                    const pos = await new Promise((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
+                    });
+                    lat = pos.coords.latitude;
+                    lng = pos.coords.longitude;
+                } catch (e) {
+                    console.warn("Could not get exact location for SOS, falling back to last known.");
+                    if (realLocationFound) {
+                        lat = globalLat;
+                        lng = globalLng;
+                    }
+                }
+            } else if (realLocationFound) {
+                lat = globalLat;
+                lng = globalLng;
+            }
+            
+            try {
+                const res = await fetch('/api/sos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat, lng })
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    if (data.mocked) {
+                        showToast('Messages Sent (Mocked)', `SOS alerts sent to all ${emergencyContacts.length} contacts. (Twilio not configured)`, 'info');
+                    } else {
+                        showToast('Messages Sent', `SOS alerts sent to all ${emergencyContacts.length} contacts.`, 'info');
+                    }
+                } else {
+                    showToast('SOS Failed', 'Failed to send alerts.', 'sos');
+                }
+            } catch (err) {
+                console.error('SOS Error:', err);
+                showToast('SOS Failed', 'Network error while sending alerts.', 'sos');
+            }
+        }
+
+        function simulateVoice(prefix) {
+            const micBtn = document.getElementById(`${prefix}-mic`);
+            const statusText = document.getElementById(`${prefix}-status`);
+            let resultText = document.getElementById(`${prefix}-result`);
+            
+            if (!resultText) {
+                // Create result text element if it doesn't exist (e.g., for wl-mic)
+                resultText = document.createElement('div');
+                resultText.id = `${prefix}-result`;
+                resultText.className = 'voice-result';
+                resultText.style.marginTop = '10px';
+                statusText.parentNode.insertBefore(resultText, statusText.nextSibling);
+            }
+
+            if(micBtn.classList.contains('listening')) {
+                // If already listening, we could stop it, but let's just return for now
+                // or we can stop the recognition. We'll need to store the recognition object.
+                if (window.currentRecognition) {
+                    window.currentRecognition.stop();
+                }
+                return;
+            }
+            
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                showToast('Error', 'Speech recognition is not supported in this browser.', 'sos');
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            window.currentRecognition = recognition;
+            recognition.continuous = false;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = function() {
+                micBtn.classList.add('listening');
+                statusText.textContent = "Listening... speak naturally";
+                resultText.textContent = "Listening...";
+            };
+
+            recognition.onresult = function(event) {
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    transcript += event.results[i][0].transcript;
+                }
+                resultText.textContent = transcript;
+            };
+
+            recognition.onerror = function(event) {
+                console.error('Speech recognition error', event.error);
+                micBtn.classList.remove('listening');
+                if (event.error === 'not-allowed') {
+                    statusText.textContent = "Microphone access denied.";
+                    showToast('Microphone Blocked', 'Please allow microphone access in your browser settings to use voice features.', 'sos');
+                } else {
+                    statusText.textContent = "Error listening. Please try again.";
+                }
+            };
+
+            recognition.onend = function() {
+                micBtn.classList.remove('listening');
+                statusText.textContent = "Voice transcription complete. Analyzing emotion...";
+                window.currentRecognition = null;
+                
+                if (window.analyzeEmotionWithGemini && resultText.textContent && resultText.textContent !== "Listening...") {
+                    window.analyzeEmotionWithGemini(resultText.textContent, prefix);
+                } else {
+                    statusText.textContent = "No voice detected.";
+                }
+            };
+
+            recognition.start();
+        }
+
+        // Chat
+        function sendChat(inputId, msgsId) {
+            const input = document.getElementById(inputId);
+            const msgs = document.getElementById(msgsId);
+            const text = input.value.trim();
+            if(!text) return;
+            
+            const userMsg = document.createElement('div');
+            userMsg.className = 'msg user';
+            userMsg.textContent = text;
+            msgs.appendChild(userMsg);
+            input.value = '';
+            msgs.scrollTop = msgs.scrollHeight;
+
+            setTimeout(() => {
+                const aiMsg = document.createElement('div');
+                aiMsg.className = 'msg ai';
+                aiMsg.innerHTML = "I'm here for you. Let's take it one step at a time. Would you like to try a quick meditation? 🧘‍♂️";
+                msgs.appendChild(aiMsg);
+                msgs.scrollTop = msgs.scrollHeight;
+            }, 1000);
+        }
+
+        function handleChat(e, inputId, msgsId) {
+            if(e.key === 'Enter') sendChat(inputId, msgsId);
+        }
+
+        // Breathing with Voice Guide
+        let breathingInterval;
+        let isBreathing = false;
+        let meditationDuration = 60;
+        let remainingTime = 60;
+        let timerInterval;
+
+        function setDuration(btn, seconds) {
+            if (isBreathing) return;
+            document.querySelectorAll('.duration-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            meditationDuration = seconds;
+            remainingTime = seconds;
+            updateTimerDisplay();
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(remainingTime / 60).toString().padStart(2, '0');
+            const secs = (remainingTime % 60).toString().padStart(2, '0');
+            document.getElementById('meditation-timer').textContent = `${mins}:${secs}`;
+        }
+        
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 0.8;
+                utterance.pitch = 1;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        function toggleBreathing() {
+            const circle = document.getElementById('breathe-circle');
+            const text = document.getElementById('breathe-text');
+            const btn = document.getElementById('btn-breathe');
+            const options = document.getElementById('meditation-options');
+
+            if(isBreathing) {
+                clearInterval(breathingInterval);
+                clearInterval(timerInterval);
+                circle.classList.remove('inhale');
+                text.textContent = "Ready";
+                btn.textContent = "Start Exercise";
+                isBreathing = false;
+                options.style.opacity = '1';
+                options.style.pointerEvents = 'auto';
+                remainingTime = meditationDuration;
+                updateTimerDisplay();
+                if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+                return;
+            }
+
+            isBreathing = true;
+            btn.textContent = "Stop Exercise";
+            options.style.opacity = '0.5';
+            options.style.pointerEvents = 'none';
+            
+            timerInterval = setInterval(() => {
+                remainingTime--;
+                updateTimerDisplay();
+                if (remainingTime <= 0) {
+                    toggleBreathing();
+                    showToast('Meditation Complete', 'Great job taking time for yourself.', 'info');
+                    speak("Session complete. Great job.");
+                }
+            }, 1000);
+            
+            const cycle = () => {
+                circle.classList.add('inhale');
+                text.textContent = "Breathe in";
+                speak("Breathe in deeply");
+                
+                setTimeout(() => {
+                    text.textContent = "Hold";
+                    speak("Hold");
+                    
+                    setTimeout(() => {
+                        circle.classList.remove('inhale');
+                        text.textContent = "Breathe out";
+                        speak("Breathe out slowly");
+                    }, 2000);
+                }, 4000);
+            };
+            
+            cycle();
+            breathingInterval = setInterval(cycle, 10000);
+        }
+
+        // Modals
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+            if(id === 'meditate-modal' && isBreathing) toggleBreathing();
+        }
+
+        // Journal
+        let currentMood = '😁';
+        function setMood(btn) {
+            document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentMood = btn.getAttribute('data-mood');
+        }
+
+        async function saveJournal() {
+            const input = document.getElementById('journal-input');
+            const text = input.value.trim();
+            if(!text) return;
+
+            const now = new Date();
+            const dateString = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            try {
+                await fetch('/api/journals', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date: dateString, text: text, mood: currentMood })
+                });
+                
+                loadJournals();
+                
+                input.value = '';
+                showToast('Journal Saved', 'Your entry has been securely saved.', 'info');
+                closeModal('journal-modal');
+            } catch (err) {
+                console.error('Failed to save journal', err);
+                showToast('Error', 'Failed to save journal entry.', 'sos');
+            }
+        }
+
+        // Profile
+        async function saveProfile() {
+            const name = document.getElementById('profile-name').value;
+            const email = document.getElementById('profile-email').value;
+            
+            // Gather contacts from inputs
+            const contactItems = document.querySelectorAll('.contact-edit-item');
+            const newContacts = [];
+            contactItems.forEach(item => {
+                const cName = item.querySelector('.contact-name-input').value.trim();
+                const cPhone = item.querySelector('.contact-phone-input').value.trim();
+                if (cName || cPhone) {
+                    newContacts.push({ name: cName, phone: cPhone });
+                }
+            });
+            
+            emergencyContacts = newContacts;
+
+            const profile = { name, email, contacts: emergencyContacts };
+            
+            try {
+                await fetch('/api/profile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(profile)
+                });
+                
+                renderEmergencyContacts();
+                renderReportEmergencyContacts();
+
+                showToast('Profile Updated', 'Your settings have been saved successfully.', 'info');
+            } catch (err) {
+                console.error('Failed to save profile', err);
+                showToast('Error', 'Failed to save profile.', 'sos');
+            }
+        }
+
+        // Report Submission
+        function showReportConfirmation() {
+            const activeTypeEl = document.querySelector('.report-type.active span');
+            const activeType = activeTypeEl ? activeTypeEl.textContent : 'Other';
+            const location = document.getElementById('report-location').value;
+            const desc = document.getElementById('report-desc').value || 'No description provided';
+            const isAnon = document.getElementById('anon').checked ? 'Yes' : 'No';
+
+            document.getElementById('confirm-report-type').textContent = activeType;
+            document.getElementById('confirm-report-location').textContent = location;
+            document.getElementById('confirm-report-desc').textContent = desc;
+            document.getElementById('confirm-report-anon').textContent = isAnon;
+
+            openModal('report-confirm-modal');
+        }
+
+        function submitReport() {
+            closeModal('report-confirm-modal');
+            showToast('Report Submitted', 'Your report has been securely logged.', 'info');
+            document.getElementById('report-desc').value = '';
+        }
+
+        // Map using Leaflet
+        let mapInitialized = false;
+        let map;
+        let userMarkerRef = null;
+        let currentRoute = null;
+        let destMarker = null;
+        let realLocationFound = false;
+
+        let mockIncidents = [];
+        let currentIncidentMarkers = [];
+        let activeIncidentId = null;
+
+        async function loadIncidents() {
+            try {
+                const res = await fetch('/api/incidents');
+                mockIncidents = await res.json();
+                renderIncidentsList();
+                updateIncidentMarkers();
+            } catch (err) {
+                console.error('Failed to load incidents', err);
+            }
+        }
+
+        function updateIncidentMarkers() {
+            if (!map || !userMarkerRef) return;
+            
+            // Clear existing incident markers
+            currentIncidentMarkers.forEach(m => {
+                if (m.marker) map.removeLayer(m.marker);
+            });
+            currentIncidentMarkers = [];
+
+            const baseLat = userMarkerRef.getLatLng().lat;
+            const baseLon = userMarkerRef.getLatLng().lng;
+
+            mockIncidents.forEach(inc => {
+                const colorVar = inc.severity === 'high' ? 'var(--red)' : 'var(--yellow)';
+                const icon = L.divIcon({
+                    className: 'custom-div-icon incident-marker-icon',
+                    html: `<div style="background-color: ${colorVar}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white;"></div>`,
+                    iconSize: [14, 14],
+                    iconAnchor: [7, 7]
+                });
+                
+                const lat = baseLat + inc.latOffset;
+                const lon = baseLon + inc.lngOffset;
+                
+                const marker = L.marker([lat, lon], {icon: icon}).addTo(map);
+                marker.bindPopup(`<b>${inc.title}</b><br><button onclick="showIncidentDetails(${inc.id})" style="margin-top: 5px; background: var(--blue); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;">View Details</button>`);
+                
+                marker.on('click', () => {
+                    showIncidentDetails(inc.id);
+                });
+
+                currentIncidentMarkers.push({ incidentId: inc.id, marker: marker });
+            });
+        }
+
+        function renderIncidentsList() {
+            const list = document.getElementById('incidents-list-view');
+            if(!list) return;
+            list.innerHTML = '';
+            
+            mockIncidents.forEach(inc => {
+                const colorVar = inc.severity === 'high' ? '--red' : '--yellow';
+                const bgVar = inc.severity === 'high' ? '--red-bg' : '--yellow-bg';
+                
+                const item = document.createElement('div');
+                item.className = 'nearby-item';
+                item.style.cursor = 'pointer';
+                item.onclick = () => showIncidentDetails(inc.id);
+                
+                item.innerHTML = `
+                    <div class="nearby-icon" style="background: var(${bgVar}); color: var(${colorVar});"><i data-lucide="${inc.icon}" size="18"></i></div>
+                    <div class="nearby-info"><h4>${inc.title}</h4><p>${inc.distance} · ${inc.time}${inc.confirmations ? ` · ${inc.confirmations} confirmations` : ''}</p></div>
+                    <div class="tag ${inc.severity}">${inc.severity.toUpperCase()}</div>
+                `;
+                list.appendChild(item);
+            });
+            lucide.createIcons({ root: list });
+        }
+
+        function showIncidentDetails(id) {
+            const inc = mockIncidents.find(i => i.id === id);
+            if (!inc) return;
+            
+            activeIncidentId = id;
+
+            // Update DOM
+            const colorVar = inc.severity === 'high' ? '--red' : '--yellow';
+            const bgVar = inc.severity === 'high' ? '--red-bg' : '--yellow-bg';
+            
+            const iconContainer = document.getElementById('detail-icon-container');
+            if(iconContainer) {
+                iconContainer.style.background = `var(${bgVar})`;
+                iconContainer.style.color = `var(${colorVar})`;
+                iconContainer.innerHTML = `<i data-lucide="${inc.icon}" size="24"></i>`;
+                lucide.createIcons({ root: iconContainer });
+            }
+            
+            if(document.getElementById('detail-title')) document.getElementById('detail-title').textContent = inc.title;
+            
+            const tag = document.getElementById('detail-tag');
+            if(tag) {
+                tag.className = `tag ${inc.severity}`;
+                tag.textContent = inc.severity.toUpperCase();
+            }
+            
+            if(document.getElementById('detail-desc')) document.getElementById('detail-desc').textContent = inc.desc;
+            if(document.getElementById('detail-time')) document.getElementById('detail-time').textContent = inc.time;
+            if(document.getElementById('detail-distance')) document.getElementById('detail-distance').textContent = inc.distance;
+            
+            // Animate views
+            if(document.getElementById('incidents-card-title')) document.getElementById('incidents-card-title').textContent = 'Incident Details';
+            
+            const listView = document.getElementById('incidents-list-view');
+            if(listView) {
+                listView.style.transform = 'translateX(-100%)';
+                listView.style.opacity = '0';
+                listView.style.pointerEvents = 'none';
+            }
+            
+            const detailView = document.getElementById('incidents-detail-view');
+            if(detailView) {
+                detailView.style.transform = 'translateX(0)';
+                detailView.style.opacity = '1';
+                detailView.style.pointerEvents = 'auto';
+            }
+
+            // Highlight marker on map
+            highlightMapMarker(id);
+
+            // Trigger AI Analysis
+            if (window.analyzeIncidentWithGemini) {
+                window.analyzeIncidentWithGemini(inc.desc);
+            }
+        }
+
+        function showIncidentsList() {
+            activeIncidentId = null;
+            if(document.getElementById('incidents-card-title')) document.getElementById('incidents-card-title').textContent = 'All Incidents';
+            
+            const listView = document.getElementById('incidents-list-view');
+            if(listView) {
+                listView.style.transform = 'translateX(0)';
+                listView.style.opacity = '1';
+                listView.style.pointerEvents = 'auto';
+            }
+            
+            const detailView = document.getElementById('incidents-detail-view');
+            if(detailView) {
+                detailView.style.transform = 'translateX(100%)';
+                detailView.style.opacity = '0';
+                detailView.style.pointerEvents = 'none';
+            }
+
+            // Reset map markers
+            resetMapMarkers();
+        }
+
+        function highlightMapMarker(id) {
+            if (!map) return;
+            currentIncidentMarkers.forEach(m => {
+                if (m.incidentId === id) {
+                    m.marker.openPopup();
+                    if(m.marker.getElement()) {
+                        m.marker.getElement().style.transform += ' scale(1.2)';
+                        m.marker.getElement().style.zIndex = 1000;
+                    }
+                } else {
+                    if(m.marker.getElement()) {
+                        m.marker.getElement().style.transform = m.marker.getElement().style.transform.replace(' scale(1.2)', '');
+                        m.marker.getElement().style.zIndex = 400;
+                    }
+                }
+            });
+        }
+
+        function resetMapMarkers() {
+            if (!map) return;
+            currentIncidentMarkers.forEach(m => {
+                m.marker.closePopup();
+                if(m.marker.getElement()) {
+                    m.marker.getElement().style.transform = m.marker.getElement().style.transform.replace(' scale(1.2)', '');
+                    m.marker.getElement().style.zIndex = 400;
+                }
+            });
+        }
+
+        function routeToCurrentIncident() {
+            if (!activeIncidentId) return;
+            const inc = mockIncidents.find(i => i.id === activeIncidentId);
+            const markerObj = currentIncidentMarkers.find(m => m.incidentId === activeIncidentId);
+            if (inc && markerObj) {
+                document.getElementById('destination-input').value = inc.title;
+                const latLng = markerObj.marker.getLatLng();
+                findSafeRoute([latLng.lat, latLng.lng], inc.title);
+            }
+        }
+
+        async function findSafeRoute(directLatLng = null, directName = null) {
+            const destInput = document.getElementById('destination-input').value.trim();
+            const dest = directName || destInput;
+
+            if (!dest && !directLatLng) {
+                showToast('Destination Required', 'Please enter where you want to go.', 'sos');
+                return;
+            }
+            if (!mapInitialized || !map || !userMarkerRef) {
+                showToast('Map Error', 'Location not available yet.', 'sos');
+                return;
+            }
+
+            if (!realLocationFound) {
+                showToast('Acquiring Location', 'Still trying to find your exact location. Using default/last known location for now.', 'info');
+            }
+
+            const startLatLng = realLocationFound ? { lat: globalLat, lng: globalLng } : userMarkerRef.getLatLng();
+            
+            // Show loading state
+            const btn = document.querySelector('button[onclick="findSafeRoute()"]');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i data-lucide="loader" class="spin" style="width:16px;height:16px;"></i> Routing...';
+            btn.disabled = true;
+            lucide.createIcons({ root: btn });
+
+            try {
+                let endLat, endLng, destName;
+
+                if (directLatLng) {
+                    endLat = directLatLng[0];
+                    endLng = directLatLng[1];
+                    destName = directName || "Selected Location";
+                } else {
+                    // 1. Geocode the destination using Nominatim (OpenStreetMap)
+                    // Add a viewbox around the current location to bias results nearby
+                    const viewbox = `${startLatLng.lng - 0.1},${startLatLng.lat + 0.1},${startLatLng.lng + 0.1},${startLatLng.lat - 0.1}`;
+                    const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(dest)}&viewbox=${viewbox}&bounded=0&limit=1`);
+                    const geoData = await geoRes.json();
+
+                    if (!geoData || geoData.length === 0) {
+                        showToast('Location Not Found', 'Could not find that destination. Try being more specific.', 'sos');
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        lucide.createIcons({ root: btn });
+                        return;
+                    }
+
+                    endLat = parseFloat(geoData[0].lat);
+                    endLng = parseFloat(geoData[0].lon);
+                    destName = geoData[0].name || dest;
+                }
+
+                const endLatLng = [endLat, endLng];
+
+                // 2. Get Route from OSRM (Open Source Routing Machine)
+                const routeRes = await fetch(`https://router.project-osrm.org/route/v1/foot/${startLatLng.lng},${startLatLng.lat};${endLng},${endLat}?overview=full&geometries=geojson&steps=true`);
+                const routeData = await routeRes.json();
+
+                if (currentRoute) map.removeLayer(currentRoute);
+                if (destMarker) map.removeLayer(destMarker);
+
+                let stepsHtml = '';
+
+                if (routeData.routes && routeData.routes.length > 0) {
+                    const route = routeData.routes[0];
+                    const coordinates = route.geometry.coordinates.map(coord => [coord[1], coord[0]]); // OSRM returns [lng, lat], Leaflet needs [lat, lng]
+                    
+                    // Add a glowing outline for prominence
+                    const outline = L.polyline(coordinates, {
+                        color: '#059669', // Darker green outline
+                        weight: 8,
+                        opacity: 0.6,
+                        lineJoin: 'round',
+                        lineCap: 'round'
+                    });
+                    
+                    const innerLine = L.polyline(coordinates, {
+                        color: '#34d399', // Bright green inner line
+                        weight: 4,
+                        opacity: 1,
+                        lineJoin: 'round',
+                        lineCap: 'round'
+                    });
+                    
+                    currentRoute = L.layerGroup([outline, innerLine]).addTo(map);
+
+                    // Generate turn-by-turn steps
+                    if (route.legs && route.legs[0] && route.legs[0].steps) {
+                        const steps = route.legs[0].steps;
+                        stepsHtml = '<div style="margin-top: 12px; max-height: 150px; overflow-y: auto; font-size: 13px; color: var(--text);">';
+                        steps.forEach((step, index) => {
+                            if (step.maneuver && step.maneuver.instruction) {
+                                stepsHtml += `<div style="padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px;">
+                                    <span style="color: var(--blue); font-weight: bold;">${index + 1}.</span>
+                                    <span>${step.maneuver.instruction}</span>
+                                </div>`;
+                            } else if (step.name) {
+                                stepsHtml += `<div style="padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px;">
+                                    <span style="color: var(--blue); font-weight: bold;">${index + 1}.</span>
+                                    <span>Continue on ${step.name}</span>
+                                </div>`;
+                            }
+                        });
+                        stepsHtml += '</div>';
+                    }
+                } else {
+                    // Fallback to straight line if routing fails
+                    currentRoute = L.polyline([startLatLng, endLatLng], {
+                        color: '#34d399',
+                        weight: 5,
+                        opacity: 1,
+                        dashArray: '10, 10'
+                    }).addTo(map);
+                }
+
+                const destIcon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: '<div style="background-color: var(--blue); width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px rgba(59, 130, 246, 0.8);"></div>',
+                    iconSize: [14, 14],
+                    iconAnchor: [7, 7]
+                });
+                
+                destMarker = L.marker(endLatLng, {icon: destIcon}).addTo(map).bindPopup(destName).openPopup();
+
+                // Fit bounds to the route or markers
+                if (currentRoute && currentRoute.getBounds) {
+                    map.fitBounds(currentRoute.getBounds(), { padding: [50, 50] });
+                } else {
+                    map.fitBounds(L.latLngBounds(startLatLng, endLatLng), { padding: [50, 50] });
+                }
+
+                showToast('Safe Route Found', `Routing to ${destName}.`, 'info');
+                
+                const suggestionCard = document.getElementById('route-suggestion-content');
+                if (suggestionCard) {
+                    suggestionCard.innerHTML = `
+                        <div style="background: var(--bg); border: 1px solid var(--border); padding: 16px; border-radius: 12px;">
+                            <p style="color: var(--muted); font-size: 12px; margin-bottom: 8px;">Recommended safe route to ${destName}</p>
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <div style="display: flex; align-items: center; gap: 10px; font-weight: 500;">
+                                    <i data-lucide="map-pin" style="color: var(--blue);" size="18"></i> Via Safe Corridors
+                                </div>
+                                <div class="tag safe">SAFE</div>
+                            </div>
+                            ${stepsHtml}
+                        </div>
+                    `;
+                    lucide.createIcons({ root: suggestionCard });
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('Routing Error', 'Failed to calculate route. Please try again.', 'sos');
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                lucide.createIcons({ root: btn });
+            }
+        }
+        
+        function initMap() {
+            if (mapInitialized) return;
+            
+            const mapContainer = document.getElementById('actual-map');
+            mapContainer.innerHTML = '<div id="leaflet-map" style="width: 100%; height: 100%;"></div>';
+            
+            // Default fallback location (e.g., a generic city center)
+            const defaultLat = 28.6139;
+            const defaultLon = 77.2090;
+            
+            const initialLat = realLocationFound ? globalLat : defaultLat;
+            const initialLon = realLocationFound ? globalLng : defaultLon;
+            
+            map = L.map('leaflet-map').setView([initialLat, initialLon], 13);
+            
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(map);
+
+            const userIcon = L.divIcon({
+                className: 'custom-div-icon',
+                html: '<div style="background-color: var(--blue); width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(59, 130, 246, 0.8);"></div>',
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+            });
+
+            let userMarker = L.marker([initialLat, initialLon], {icon: userIcon}).addTo(map);
+            userMarker.bindPopup("<b>Your Location</b>").openPopup();
+            userMarkerRef = userMarker;
+
+            // Initial placement
+            updateIncidentMarkers();
+            renderIncidentsList();
+
+            if (realLocationFound) {
+                // If location was already found globally, center map
+                map.setView([initialLat, initialLon], 15);
+                window.initialMapCentered = true;
+            } else if (!navigator.geolocation) {
+                mapInitialized = true;
+            }
+            
+            // Fix map rendering issue in hidden tabs
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 100);
+            
+            mapInitialized = true;
+        }
+    </script>
+    <script type="module">
+        import { GoogleGenAI, Type } from "@google/genai";
+
+        window.analyzeIncidentWithGemini = async function(description) {
+            const analysisContainer = document.getElementById('incident-ai-analysis');
+            const statusText = document.getElementById('incident-ai-status');
+            const resultContainer = document.getElementById('incident-ai-result');
+            const severityEl = document.getElementById('incident-ai-severity');
+            const risksList = document.getElementById('incident-ai-risks');
+
+            if (!analysisContainer || !statusText || !resultContainer || !severityEl || !risksList) return;
+
+            analysisContainer.style.display = 'block';
+            resultContainer.style.display = 'none';
+            statusText.textContent = "Analyzing incident...";
+            statusText.style.display = 'block';
+
+            try {
+                const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+                
+                const response = await ai.models.generateContent({
+                    model: "gemini-3-flash-preview",
+                    contents: `Analyze the following incident description reported by a user.
+                    Determine a predicted severity level (Low, Medium, High, Critical) and list 2-3 potential risks or safety concerns associated with this incident.
+                    
+                    Description: "${description}"`,
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: Type.OBJECT,
+                            properties: {
+                                predictedSeverity: { type: Type.STRING, description: "Predicted severity: Low, Medium, High, or Critical." },
+                                potentialRisks: { type: Type.ARRAY, items: { type: Type.STRING }, description: "2-3 potential risks or safety concerns." }
+                            },
+                            required: ["predictedSeverity", "potentialRisks"]
+                        }
+                    }
+                });
+
+                const data = JSON.parse(response.text.trim());
+                
+                statusText.style.display = 'none';
+                resultContainer.style.display = 'block';
+                
+                severityEl.textContent = data.predictedSeverity;
+                
+                // Color code severity
+                let color = "var(--blue)";
+                const sevLower = data.predictedSeverity.toLowerCase();
+                if (sevLower.includes('high') || sevLower.includes('critical')) color = "var(--red)";
+                else if (sevLower.includes('medium')) color = "var(--yellow)";
+                else if (sevLower.includes('low')) color = "var(--green)";
+                
+                severityEl.style.color = color;
+
+                risksList.innerHTML = data.potentialRisks.map(risk => `<li>${risk}</li>`).join('');
+
+            } catch (error) {
+                console.error("Gemini API Error (Incident Analysis):", error);
+                statusText.textContent = "Failed to analyze incident.";
+            }
+        };
+
+        window.analyzeEmotionWithGemini = async function(text, prefix) {
+            const statusText = document.getElementById(`${prefix}-status`);
+            const resultText = document.getElementById(`${prefix}-result`);
+            
+            try {
+                const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+                
+                const response = await ai.models.generateContent({
+                    model: "gemini-3-flash-preview",
+                    contents: `Analyze the emotional state of the following text transcribed from a user's voice. 
+                    Determine their primary emotion (e.g., Calm, Anxious, Stressed, Happy, Sad, Angry, Fearful) and secondary emotions.
+                    Provide granular scores (0-100%) for: stress level, anxiety level, energy level, and focus level.
+                    Also provide a short, supportive 1-sentence response, and 2-3 actionable coping mechanisms tailored to their emotional state.
+                    
+                    Text: "${text}"`,
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: Type.OBJECT,
+                            properties: {
+                                primaryEmotion: { type: Type.STRING, description: "The primary emotion detected." },
+                                secondaryEmotions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Secondary emotions detected." },
+                                stressLevel: { type: Type.NUMBER, description: "Stress level from 0 to 100." },
+                                anxietyLevel: { type: Type.NUMBER, description: "Anxiety level from 0 to 100." },
+                                energyLevel: { type: Type.NUMBER, description: "Energy level from 0 to 100." },
+                                focusLevel: { type: Type.NUMBER, description: "Focus level from 0 to 100." },
+                                supportiveMessage: { type: Type.STRING, description: "A short supportive message." },
+                                copingMechanisms: { type: Type.ARRAY, items: { type: Type.STRING }, description: "2-3 actionable coping mechanisms." }
+                            },
+                            required: ["primaryEmotion", "stressLevel", "anxietyLevel", "energyLevel", "focusLevel", "supportiveMessage", "copingMechanisms"]
+                        }
+                    }
+                });
+
+                const data = JSON.parse(response.text.trim());
+                
+                statusText.textContent = "Analysis complete.";
+                
+                // Update the UI with the result
+                let color = "var(--blue)";
+                if (data.stressLevel > 70) color = "var(--red)";
+                else if (data.stressLevel > 40) color = "var(--yellow)";
+                else color = "var(--green)";
+
+                let copingHtml = '';
+                if (data.copingMechanisms && data.copingMechanisms.length > 0) {
+                    copingHtml = `
+                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+                            <strong style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px;">Suggested Coping Mechanisms:</strong>
+                            <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: var(--text);">
+                                ${data.copingMechanisms.map(mech => `<li>${mech}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+
+                resultText.innerHTML = `
+                    <div style="margin-top: 10px; padding: 12px; background: var(--card-hover); border-radius: 8px; border-left: 4px solid ${color};">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <strong>${data.primaryEmotion}</strong>
+                            <span style="color: ${color}; font-weight: bold;">Stress: ${data.stressLevel}%</span>
+                        </div>
+                        <div style="font-size: 13px; color: var(--muted);">${data.supportiveMessage}</div>
+                        ${copingHtml}
+                    </div>
+                `;
+                
+                if (data.stressLevel > 70) {
+                    showToast('High Stress Detected', 'Would you like to start a breathing exercise or contact someone?', 'sos');
+                }
+
+                // Update the Emotional State card
+                const scoreCircle = document.getElementById('emotion-score-circle');
+                const scoreVal = document.getElementById('emotion-score-val');
+                const scoreLabel = document.getElementById('emotion-score-label');
+                const stressFill = document.getElementById('emotion-stress-fill');
+                const stressVal = document.getElementById('emotion-stress-val');
+                const anxietyFill = document.getElementById('emotion-anxiety-fill');
+                const anxietyVal = document.getElementById('emotion-anxiety-val');
+                const energyFill = document.getElementById('emotion-energy-fill');
+                const energyVal = document.getElementById('emotion-energy-val');
+                const focusFill = document.getElementById('emotion-focus-fill');
+                const focusVal = document.getElementById('emotion-focus-val');
+
+                if (scoreCircle && scoreVal && scoreLabel) {
+                    // We'll use 100 - stressLevel as the "Calm" or "Positive" score for the main circle
+                    const positiveScore = 100 - data.stressLevel;
+                    scoreVal.textContent = positiveScore;
+                    scoreLabel.textContent = data.primaryEmotion;
+                    scoreCircle.style.background = `conic-gradient(${color} ${positiveScore}%, var(--border) 0)`;
+                }
+
+                if (stressFill && stressVal) {
+                    stressFill.style.width = `${data.stressLevel}%`;
+                    stressVal.textContent = data.stressLevel;
+                }
+
+                // For Anxiety, Energy, Focus, use the values from Gemini
+                if (anxietyFill && anxietyVal) {
+                    anxietyFill.style.width = `${data.anxietyLevel}%`;
+                    anxietyVal.textContent = data.anxietyLevel;
+                }
+                
+                if (energyFill && energyVal) {
+                    energyFill.style.width = `${data.energyLevel}%`;
+                    energyVal.textContent = data.energyLevel;
+                }
+
+                if (focusFill && focusVal) {
+                    focusFill.style.width = `${data.focusLevel}%`;
+                    focusVal.textContent = data.focusLevel;
+                }
+
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                statusText.textContent = "Failed to analyze emotion.";
+            }
+        };
+    </script>
+</body>
+</html>

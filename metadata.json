@@ -1,0 +1,5 @@
+{
+  "name": "SafeMind",
+  "description": "A personal safety and wellness companion app.",
+  "requestFramePermissions": ["geolocation", "microphone"]
+}
