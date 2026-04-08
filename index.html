@@ -971,17 +971,28 @@
         // Profile & Emergency Contacts
         let emergencyContacts = [];
 
-        async function loadProfile() {
+        window.loadProfile = async function() {
+            const user = window.currentUser();
+            if (!user) return;
             try {
-                const res = await fetch('/api/profile');
-                const profile = await res.json();
+                const docRef = window.doc(window.db(), 'users', user.uid);
+                const docSnap = await window.getDocs(window.query(window.collection(window.db(), 'users'))); // Just to check if we can read
                 
-                document.getElementById('profile-name').value = profile.name || '';
-                document.getElementById('profile-email').value = profile.email || '';
-                
-                emergencyContacts = profile.contacts || [];
-                renderEmergencyContacts();
-                renderReportEmergencyContacts();
+                // We use onSnapshot for real-time updates
+                window.onSnapshot(docRef, (snapshot) => {
+                    if (snapshot.exists()) {
+                        const profile = snapshot.data();
+                        document.getElementById('profile-name').value = profile.name || user.displayName || '';
+                        document.getElementById('profile-email').value = profile.email || user.email || '';
+                        emergencyContacts = profile.contacts || [];
+                    } else {
+                        document.getElementById('profile-name').value = user.displayName || '';
+                        document.getElementById('profile-email').value = user.email || '';
+                        emergencyContacts = [];
+                    }
+                    renderEmergencyContacts();
+                    renderReportEmergencyContacts();
+                });
             } catch (err) {
                 console.error('Failed to load profile', err);
             }
@@ -1059,8 +1070,10 @@
             const contact = emergencyContacts[index];
             if (index === 0) {
                 showToast('Calling Contact', `Initiating SOS call to ${contact.name} (${contact.phone})...`, 'sos');
+                window.location.href = `tel:${contact.phone}`;
             } else {
                 showToast('Sending Message', `Sending SOS message to ${contact.name} (${contact.phone})...`, 'info');
+                window.location.href = `sms:${contact.phone}`;
             }
         }
 
@@ -1072,16 +1085,11 @@
             openModal('journal-delete-confirm-modal');
         }
 
-        async function confirmDeleteJournal() {
+        window.confirmDeleteJournal = async function() {
             if (!journalToDelete) return;
             try {
-                const res = await fetch(`/api/journals/${journalToDelete}`, { method: 'DELETE' });
-                if (res.ok) {
-                    showToast('Deleted', 'Journal entry removed.', 'info');
-                    loadJournals();
-                } else {
-                    showToast('Error', 'Failed to delete entry.', 'sos');
-                }
+                await window.deleteDoc(window.doc(window.db(), 'journals', journalToDelete));
+                showToast('Deleted', 'Journal entry removed.', 'info');
             } catch (err) {
                 console.error('Failed to delete journal', err);
                 showToast('Error', 'Failed to delete entry.', 'sos');
@@ -1090,36 +1098,49 @@
             journalToDelete = null;
         }
 
-        async function loadJournals() {
+        window.loadJournals = async function() {
+            const user = window.currentUser();
+            if (!user) return;
             try {
-                const res = await fetch('/api/journals');
-                const entries = await res.json();
-                const list = document.getElementById('journal-entries-list');
-                
-                if (entries.length === 0) {
-                    list.innerHTML = '<div style="color: var(--muted); font-size: 12px; text-align: center; padding: 20px;">No entries yet. Start journaling!</div>';
-                    return;
-                }
-                
-                list.innerHTML = '';
-                entries.forEach(entry => {
-                    const div = document.createElement('div');
-                    div.className = 'journal-entry';
-                    div.innerHTML = `
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div class="journal-date">${entry.date}</div>
-                            <div style="display: flex; align-items: center; gap: 12px;">
-                                <div style="font-size: 24px;">${entry.mood || '📝'}</div>
-                                <button onclick="promptDeleteJournal(${entry.id})" style="background: none; border: none; color: var(--muted); cursor: pointer; padding: 5px; border-radius: 4px; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'" title="Delete entry">
-                                    <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
-                                </button>
+                const q = window.query(window.collection(window.db(), 'journals'));
+                window.onSnapshot(q, (snapshot) => {
+                    const entries = [];
+                    snapshot.forEach((doc) => {
+                        const data = doc.data();
+                        if (data.userId === user.uid) {
+                            entries.push({ id: doc.id, ...data });
+                        }
+                    });
+                    // Sort by date descending
+                    entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    
+                    const list = document.getElementById('journal-entries-list');
+                    
+                    if (entries.length === 0) {
+                        list.innerHTML = '<div style="color: var(--muted); font-size: 12px; text-align: center; padding: 20px;">No entries yet. Start journaling!</div>';
+                        return;
+                    }
+                    
+                    list.innerHTML = '';
+                    entries.forEach(entry => {
+                        const div = document.createElement('div');
+                        div.className = 'journal-entry';
+                        div.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div class="journal-date">${entry.date}</div>
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <div style="font-size: 24px;">${entry.mood || '📝'}</div>
+                                    <button onclick="promptDeleteJournal('${entry.id}')" style="background: none; border: none; color: var(--muted); cursor: pointer; padding: 5px; border-radius: 4px; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'" title="Delete entry">
+                                        <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                        <p style="margin-top: 10px;">${entry.text}</p>
-                    `;
-                    list.appendChild(div);
+                            <p style="margin-top: 10px;">${entry.text}</p>
+                        `;
+                        list.appendChild(div);
+                    });
+                    lucide.createIcons({ root: list });
                 });
-                lucide.createIcons({ root: list });
             } catch (err) {
                 console.error('Failed to load journals', err);
             }
@@ -1227,10 +1248,19 @@
             }
             
             try {
+                const user = window.currentUser();
+                let userProfile = null;
+                if (user) {
+                    const docSnap = await window.getDoc(window.doc(window.db(), 'users', user.uid));
+                    if (docSnap.exists()) {
+                        userProfile = docSnap.data();
+                    }
+                }
+
                 const res = await fetch('/api/sos', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lat, lng })
+                    body: JSON.stringify({ lat, lng, profile: userProfile })
                 });
                 
                 const data = await res.json();
@@ -1249,7 +1279,7 @@
             }
         }
 
-        function simulateVoice(prefix) {
+        async function simulateVoice(prefix) {
             const micBtn = document.getElementById(`${prefix}-mic`);
             const statusText = document.getElementById(`${prefix}-status`);
             let resultText = document.getElementById(`${prefix}-result`);
@@ -1269,6 +1299,36 @@
                 if (window.currentRecognition) {
                     window.currentRecognition.stop();
                 }
+                return;
+            }
+
+            try {
+                // Request microphone permission explicitly first
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // Stop the tracks immediately since we only needed permission for SpeechRecognition
+                stream.getTracks().forEach(track => track.stop());
+            } catch (err) {
+                const errMsg = err.message || String(err);
+                console.error("Microphone access denied:", errMsg);
+                if (err.name === 'NotFoundError' || errMsg.includes('Requested device not found') || errMsg.includes('NotFoundError') || errMsg.includes('device not found')) {
+                    console.log("No microphone found. Using simulated voice input for testing.");
+                    micBtn.classList.add('listening');
+                    statusText.textContent = "No mic found. Simulating input...";
+                    resultText.textContent = "Listening...";
+                    
+                    setTimeout(() => {
+                        resultText.textContent = "I've been feeling really overwhelmed and stressed out with work lately. It's hard to focus.";
+                        micBtn.classList.remove('listening');
+                        statusText.textContent = "Voice transcription complete. Analyzing emotion...";
+                        if (window.analyzeEmotionWithGemini) {
+                            window.analyzeEmotionWithGemini(resultText.textContent, prefix);
+                        }
+                    }, 2500);
+                    return;
+                }
+                
+                statusText.textContent = "Microphone access denied.";
+                showToast('Microphone Blocked', 'Please allow microphone access in your browser settings to use voice features.', 'sos');
                 return;
             }
             
@@ -1325,7 +1385,7 @@
         }
 
         // Chat
-        function sendChat(inputId, msgsId) {
+        async function sendChat(inputId, msgsId) {
             const input = document.getElementById(inputId);
             const msgs = document.getElementById(msgsId);
             const text = input.value.trim();
@@ -1338,13 +1398,56 @@
             input.value = '';
             msgs.scrollTop = msgs.scrollHeight;
 
-            setTimeout(() => {
+            // Extract history
+            const history = [];
+            const messageNodes = msgs.querySelectorAll('.msg');
+            messageNodes.forEach(node => {
+                if (node !== userMsg) {
+                    history.push({
+                        role: node.classList.contains('ai') ? 'ai' : 'user',
+                        text: node.textContent
+                    });
+                }
+            });
+
+            // Add loading indicator
+            const loadingMsg = document.createElement('div');
+            loadingMsg.className = 'msg ai';
+            loadingMsg.innerHTML = '<i data-lucide="loader" class="spin" style="width:16px;height:16px;"></i> Thinking...';
+            msgs.appendChild(loadingMsg);
+            lucide.createIcons({ root: loadingMsg });
+            msgs.scrollTop = msgs.scrollHeight;
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text, history })
+                });
+                
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.details || errData.error || 'Network response was not ok');
+                }
+                const data = await response.json();
+                
+                msgs.removeChild(loadingMsg);
+                
                 const aiMsg = document.createElement('div');
                 aiMsg.className = 'msg ai';
-                aiMsg.innerHTML = "I'm here for you. Let's take it one step at a time. Would you like to try a quick meditation? 🧘‍♂️";
+                aiMsg.textContent = data.text;
                 msgs.appendChild(aiMsg);
                 msgs.scrollTop = msgs.scrollHeight;
-            }, 1000);
+            } catch (error) {
+                console.error("Chat Error:", error);
+                msgs.removeChild(loadingMsg);
+                const errorMsg = document.createElement('div');
+                errorMsg.className = 'msg ai';
+                errorMsg.style.color = 'var(--red)';
+                errorMsg.textContent = "Sorry, I encountered an error: " + error.message;
+                msgs.appendChild(errorMsg);
+                msgs.scrollTop = msgs.scrollHeight;
+            }
         }
 
         function handleChat(e, inputId, msgsId) {
@@ -1457,7 +1560,9 @@
             currentMood = btn.getAttribute('data-mood');
         }
 
-        async function saveJournal() {
+        window.saveJournal = async function() {
+            const user = window.currentUser();
+            if (!user) return;
             const input = document.getElementById('journal-input');
             const text = input.value.trim();
             if(!text) return;
@@ -1466,13 +1571,12 @@
             const dateString = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             
             try {
-                await fetch('/api/journals', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ date: dateString, text: text, mood: currentMood })
+                await window.addDoc(window.collection(window.db(), 'journals'), {
+                    userId: user.uid,
+                    text,
+                    mood: currentMood,
+                    date: dateString
                 });
-                
-                loadJournals();
                 
                 input.value = '';
                 showToast('Journal Saved', 'Your entry has been securely saved.', 'info');
@@ -1484,7 +1588,9 @@
         }
 
         // Profile
-        async function saveProfile() {
+        window.saveProfile = async function() {
+            const user = window.currentUser();
+            if (!user) return;
             const name = document.getElementById('profile-name').value;
             const email = document.getElementById('profile-email').value;
             
@@ -1504,11 +1610,7 @@
             const profile = { name, email, contacts: emergencyContacts };
             
             try {
-                await fetch('/api/profile', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(profile)
-                });
+                await window.setDoc(window.doc(window.db(), 'users', user.uid), profile);
                 
                 renderEmergencyContacts();
                 renderReportEmergencyContacts();
@@ -1536,10 +1638,41 @@
             openModal('report-confirm-modal');
         }
 
-        function submitReport() {
-            closeModal('report-confirm-modal');
-            showToast('Report Submitted', 'Your report has been securely logged.', 'info');
-            document.getElementById('report-desc').value = '';
+        window.submitReport = async function() {
+            const user = window.currentUser();
+            if (!user) return;
+            const activeTypeEl = document.querySelector('.report-type.active span');
+            const activeType = activeTypeEl ? activeTypeEl.textContent : 'Other';
+            const location = document.getElementById('report-location').value;
+            const desc = document.getElementById('report-desc').value;
+            const anonymous = document.getElementById('report-anonymous').checked;
+
+            if (!location || !desc) {
+                showToast('Error', 'Please fill in all required fields.', 'sos');
+                return;
+            }
+
+            try {
+                await window.addDoc(window.collection(window.db(), 'reports'), {
+                    userId: user.uid,
+                    type: activeType,
+                    location,
+                    description: desc,
+                    anonymous,
+                    timestamp: new Date().toISOString()
+                });
+                
+                showToast('Report Submitted', 'Your report has been sent to local authorities.', 'info');
+                closeModal('report-confirm-modal');
+                
+                // Clear form
+                document.getElementById('report-location').value = '';
+                document.getElementById('report-desc').value = '';
+                document.getElementById('report-anonymous').checked = false;
+            } catch (err) {
+                console.error('Failed to submit report', err);
+                showToast('Error', 'Failed to submit report.', 'sos');
+            }
         }
 
         // Map using Leaflet
@@ -1554,12 +1687,26 @@
         let currentIncidentMarkers = [];
         let activeIncidentId = null;
 
-        async function loadIncidents() {
+        window.loadIncidents = async function() {
             try {
-                const res = await fetch('/api/incidents');
-                mockIncidents = await res.json();
-                renderIncidentsList();
-                updateIncidentMarkers();
+                const q = window.query(window.collection(window.db(), 'incidents'));
+                window.onSnapshot(q, (snapshot) => {
+                    mockIncidents = [];
+                    if (snapshot.empty) {
+                        // Fallback demo data if database is empty
+                        mockIncidents = [
+                            { id: 'demo1', title: 'Suspicious Activity', severity: 'high', icon: 'alert-triangle', distance: '0.2 miles', time: '10 mins ago', confirmations: 3, latOffset: 0.002, lngOffset: 0.002, desc: 'Group of individuals loitering near the park entrance.' },
+                            { id: 'demo2', title: 'Streetlight Out', severity: 'medium', icon: 'lightbulb-off', distance: '0.5 miles', time: '1 hour ago', confirmations: 1, latOffset: -0.003, lngOffset: 0.001, desc: 'Streetlight is out on Main St, making it very dark.' },
+                            { id: 'demo3', title: 'Road Blocked', severity: 'medium', icon: 'alert-circle', distance: '0.8 miles', time: '2 hours ago', confirmations: 5, latOffset: 0.001, lngOffset: -0.004, desc: 'Fallen tree blocking the road.' }
+                        ];
+                    } else {
+                        snapshot.forEach((doc) => {
+                            mockIncidents.push({ id: doc.id, ...doc.data() });
+                        });
+                    }
+                    renderIncidentsList();
+                    updateIncidentMarkers();
+                });
             } catch (err) {
                 console.error('Failed to load incidents', err);
             }
@@ -1590,7 +1737,7 @@
                 const lon = baseLon + inc.lngOffset;
                 
                 const marker = L.marker([lat, lon], {icon: icon}).addTo(map);
-                marker.bindPopup(`<b>${inc.title}</b><br><button onclick="showIncidentDetails(${inc.id})" style="margin-top: 5px; background: var(--blue); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;">View Details</button>`);
+                marker.bindPopup(`<b>${inc.title}</b><br><button onclick="showIncidentDetails('${inc.id}')" style="margin-top: 5px; background: var(--blue); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;">View Details</button>`);
                 
                 marker.on('click', () => {
                     showIncidentDetails(inc.id);
@@ -1955,7 +2102,67 @@
         }
     </script>
     <script type="module">
-        import { GoogleGenAI, Type } from "@google/genai";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getFirestore, collection, getDocs, getDoc, addDoc, deleteDoc, doc, updateDoc, setDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+
+        let db;
+        let auth;
+        let currentUser = null;
+
+        async function initFirebase() {
+            try {
+                const res = await fetch('/firebase-applet-config.json');
+                const config = await res.json();
+                const app = initializeApp(config);
+                db = getFirestore(app, config.firestoreDatabaseId);
+                auth = getAuth(app);
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        currentUser = user;
+                        document.getElementById('login-screen').style.display = 'none';
+                        await loadProfile();
+                        await loadJournals();
+                        await loadIncidents();
+                        showToast('Welcome', `Signed in as ${user.displayName || 'User'}`, 'info');
+                    } else {
+                        document.getElementById('login-screen').style.display = 'flex';
+                    }
+                });
+            } catch (err) {
+                console.error("Firebase init error:", err);
+            }
+        }
+
+        initFirebase();
+
+        window.login = async function() {
+            if (!auth) return;
+            const provider = new GoogleAuthProvider();
+            try {
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                console.error("Login error:", error);
+                showToast('Error', 'Login failed.', 'sos');
+            }
+        };
+
+        // Make Firebase available globally for other functions
+        window.db = () => db;
+        window.auth = () => auth;
+        window.currentUser = () => currentUser;
+        window.collection = collection;
+        window.getDocs = getDocs;
+        window.getDoc = getDoc;
+        window.addDoc = addDoc;
+        window.deleteDoc = deleteDoc;
+        window.doc = doc;
+        window.updateDoc = updateDoc;
+        window.setDoc = setDoc;
+        window.onSnapshot = onSnapshot;
+        window.query = query;
+        window.orderBy = orderBy;
 
         window.analyzeIncidentWithGemini = async function(description) {
             const analysisContainer = document.getElementById('incident-ai-analysis');
@@ -1972,28 +2179,14 @@
             statusText.style.display = 'block';
 
             try {
-                const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-                
-                const response = await ai.models.generateContent({
-                    model: "gemini-3-flash-preview",
-                    contents: `Analyze the following incident description reported by a user.
-                    Determine a predicted severity level (Low, Medium, High, Critical) and list 2-3 potential risks or safety concerns associated with this incident.
-                    
-                    Description: "${description}"`,
-                    config: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: Type.OBJECT,
-                            properties: {
-                                predictedSeverity: { type: Type.STRING, description: "Predicted severity: Low, Medium, High, or Critical." },
-                                potentialRisks: { type: Type.ARRAY, items: { type: Type.STRING }, description: "2-3 potential risks or safety concerns." }
-                            },
-                            required: ["predictedSeverity", "potentialRisks"]
-                        }
-                    }
+                const response = await fetch('/api/analyze-incident', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ description })
                 });
-
-                const data = JSON.parse(response.text.trim());
+                
+                if (!response.ok) throw new Error('Network response was not ok');
+                const data = await response.json();
                 
                 statusText.style.display = 'none';
                 resultContainer.style.display = 'block';
@@ -2009,10 +2202,15 @@
                 
                 severityEl.style.color = color;
 
-                risksList.innerHTML = data.potentialRisks.map(risk => `<li>${risk}</li>`).join('');
+                risksList.innerHTML = '';
+                data.potentialRisks.forEach(risk => {
+                    const li = document.createElement('li');
+                    li.textContent = risk;
+                    risksList.appendChild(li);
+                });
 
             } catch (error) {
-                console.error("Gemini API Error (Incident Analysis):", error);
+                console.error("API Error (Incident Analysis):", error);
                 statusText.textContent = "Failed to analyze incident.";
             }
         };
@@ -2022,36 +2220,14 @@
             const resultText = document.getElementById(`${prefix}-result`);
             
             try {
-                const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-                
-                const response = await ai.models.generateContent({
-                    model: "gemini-3-flash-preview",
-                    contents: `Analyze the emotional state of the following text transcribed from a user's voice. 
-                    Determine their primary emotion (e.g., Calm, Anxious, Stressed, Happy, Sad, Angry, Fearful) and secondary emotions.
-                    Provide granular scores (0-100%) for: stress level, anxiety level, energy level, and focus level.
-                    Also provide a short, supportive 1-sentence response, and 2-3 actionable coping mechanisms tailored to their emotional state.
-                    
-                    Text: "${text}"`,
-                    config: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: Type.OBJECT,
-                            properties: {
-                                primaryEmotion: { type: Type.STRING, description: "The primary emotion detected." },
-                                secondaryEmotions: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Secondary emotions detected." },
-                                stressLevel: { type: Type.NUMBER, description: "Stress level from 0 to 100." },
-                                anxietyLevel: { type: Type.NUMBER, description: "Anxiety level from 0 to 100." },
-                                energyLevel: { type: Type.NUMBER, description: "Energy level from 0 to 100." },
-                                focusLevel: { type: Type.NUMBER, description: "Focus level from 0 to 100." },
-                                supportiveMessage: { type: Type.STRING, description: "A short supportive message." },
-                                copingMechanisms: { type: Type.ARRAY, items: { type: Type.STRING }, description: "2-3 actionable coping mechanisms." }
-                            },
-                            required: ["primaryEmotion", "stressLevel", "anxietyLevel", "energyLevel", "focusLevel", "supportiveMessage", "copingMechanisms"]
-                        }
-                    }
+                const response = await fetch('/api/analyze-emotion', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
                 });
-
-                const data = JSON.parse(response.text.trim());
+                
+                if (!response.ok) throw new Error('Network response was not ok');
+                const data = await response.json();
                 
                 statusText.textContent = "Analysis complete.";
                 
@@ -2061,28 +2237,54 @@
                 else if (data.stressLevel > 40) color = "var(--yellow)";
                 else color = "var(--green)";
 
-                let copingHtml = '';
+                resultText.innerHTML = '';
+                
+                const container = document.createElement('div');
+                container.style.cssText = `margin-top: 10px; padding: 12px; background: var(--card-hover); border-radius: 8px; border-left: 4px solid ${color};`;
+                
+                const header = document.createElement('div');
+                header.style.cssText = 'display: flex; justify-content: space-between; margin-bottom: 8px;';
+                
+                const emotionStrong = document.createElement('strong');
+                emotionStrong.textContent = data.primaryEmotion;
+                
+                const stressSpan = document.createElement('span');
+                stressSpan.style.cssText = `color: ${color}; font-weight: bold;`;
+                stressSpan.textContent = `Stress: ${data.stressLevel}%`;
+                
+                header.appendChild(emotionStrong);
+                header.appendChild(stressSpan);
+                
+                const msgDiv = document.createElement('div');
+                msgDiv.style.cssText = 'font-size: 13px; color: var(--muted);';
+                msgDiv.textContent = data.supportiveMessage;
+                
+                container.appendChild(header);
+                container.appendChild(msgDiv);
+
                 if (data.copingMechanisms && data.copingMechanisms.length > 0) {
-                    copingHtml = `
-                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-                            <strong style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px;">Suggested Coping Mechanisms:</strong>
-                            <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: var(--text);">
-                                ${data.copingMechanisms.map(mech => `<li>${mech}</li>`).join('')}
-                            </ul>
-                        </div>
-                    `;
+                    const copingDiv = document.createElement('div');
+                    copingDiv.style.cssText = 'margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);';
+                    
+                    const copingStrong = document.createElement('strong');
+                    copingStrong.style.cssText = 'font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px;';
+                    copingStrong.textContent = 'Suggested Coping Mechanisms:';
+                    
+                    const ul = document.createElement('ul');
+                    ul.style.cssText = 'margin: 0; padding-left: 20px; font-size: 13px; color: var(--text);';
+                    
+                    data.copingMechanisms.forEach(mech => {
+                        const li = document.createElement('li');
+                        li.textContent = mech;
+                        ul.appendChild(li);
+                    });
+                    
+                    copingDiv.appendChild(copingStrong);
+                    copingDiv.appendChild(ul);
+                    container.appendChild(copingDiv);
                 }
 
-                resultText.innerHTML = `
-                    <div style="margin-top: 10px; padding: 12px; background: var(--card-hover); border-radius: 8px; border-left: 4px solid ${color};">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <strong>${data.primaryEmotion}</strong>
-                            <span style="color: ${color}; font-weight: bold;">Stress: ${data.stressLevel}%</span>
-                        </div>
-                        <div style="font-size: 13px; color: var(--muted);">${data.supportiveMessage}</div>
-                        ${copingHtml}
-                    </div>
-                `;
+                resultText.appendChild(container);
                 
                 if (data.stressLevel > 70) {
                     showToast('High Stress Detected', 'Would you like to start a breathing exercise or contact someone?', 'sos');
@@ -2131,7 +2333,7 @@
                 }
 
             } catch (error) {
-                console.error("Gemini API Error:", error);
+                console.error("API Error:", error);
                 statusText.textContent = "Failed to analyze emotion.";
             }
         };

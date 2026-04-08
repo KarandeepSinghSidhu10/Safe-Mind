@@ -1,36 +1,111 @@
+import 'dotenv/config';
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import twilio from 'twilio';
 import { OAuth2Client } from 'google-auth-library';
+import Groq from 'groq-sdk';
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json());
 
-// In-memory database
-let profile = {
-    name: 'Jane Doe',
-    email: 'jane.doe@example.com',
-    contacts: [
-        { name: 'Mom', phone: '555-0101' },
-        { name: 'Roommate', phone: '555-0102' }
-    ]
-};
+let groqClient: Groq | null = null;
 
-let journals = [
-    { id: 1, date: '4/1/2026 10:00 AM', text: 'Felt really anxious walking home today, but the app helped me stay calm.', mood: '😰' },
-    { id: 2, date: '3/30/2026 08:30 PM', text: 'Had a great day! The new route was well-lit and felt very safe.', mood: '😁' }
-];
+function getGroq(): Groq {
+    if (!groqClient) {
+        const key = process.env.GROQ_API_KEY;
+        if (!key) {
+            throw new Error('GROQ_API_KEY environment variable is required');
+        }
+        groqClient = new Groq({ apiKey: key });
+    }
+    return groqClient;
+}
 
-let incidents = [
-    { id: 1, title: 'Street harassment reported', desc: 'A group of individuals making inappropriate comments near the bus stop.', time: '8 min ago', distance: '0.2 miles', severity: 'high', icon: 'alert-triangle', latOffset: 0.005, lngOffset: -0.005, confirmations: 3 },
-    { id: 2, title: 'Broken streetlights', desc: 'Multiple streetlights are out on this block, making it very dark and unsafe to walk.', time: '25 min ago', distance: '0.5 miles', severity: 'med', icon: 'lightbulb-off', latOffset: -0.008, lngOffset: 0.002, confirmations: 0 },
-    { id: 3, title: 'Suspicious activity', desc: 'Someone loitering near the alleyway for an extended period, observing passersby.', time: '1h ago', distance: '1.1 miles', severity: 'med', icon: 'eye', latOffset: 0.002, lngOffset: 0.008, confirmations: 1 }
-];
+app.get('/api/test-key', (req, res) => {
+    res.json({ 
+        groq: process.env.GROQ_API_KEY ? process.env.GROQ_API_KEY.substring(0, 4) : null,
+        allKeys: Object.keys(process.env).filter(k => k.includes('GROQ'))
+    });
+});
 
-// API Routes
+app.post('/api/analyze-incident', async (req, res) => {
+    try {
+        const { description } = req.body;
+        const response = await getGroq().chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+                {
+                    role: "system",
+                    content: "You are an incident analysis assistant. Return ONLY a JSON object with the following structure: {\"predictedSeverity\": \"Low\" | \"Medium\" | \"High\" | \"Critical\", \"potentialRisks\": [\"risk1\", \"risk2\"]}"
+                },
+                {
+                    role: "user",
+                    content: `Analyze the following incident description reported by a user.\nDetermine a predicted severity level (Low, Medium, High, Critical) and list 2-3 potential risks or safety concerns associated with this incident.\n\nDescription: "${description}"`
+                }
+            ],
+            response_format: { type: "json_object" }
+        });
+        res.json(JSON.parse(response.choices[0].message.content || "{}"));
+    } catch (error) {
+        console.error("Groq API Error (Incident Analysis):", error);
+        res.status(500).json({ error: 'Failed to analyze incident' });
+    }
+});
+
+app.post('/api/analyze-emotion', async (req, res) => {
+    try {
+        const { text } = req.body;
+        const response = await getGroq().chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+                {
+                    role: "system",
+                    content: "You are an emotion analysis assistant. Return ONLY a JSON object with the following structure: {\"primaryEmotion\": \"string\", \"secondaryEmotions\": [\"string\"], \"stressLevel\": number (0-100), \"anxietyLevel\": number (0-100), \"energyLevel\": number (0-100), \"focusLevel\": number (0-100), \"supportiveMessage\": \"string\", \"copingMechanisms\": [\"string\"]}"
+                },
+                {
+                    role: "user",
+                    content: `Analyze the emotional state of the following text transcribed from a user's voice.\nDetermine their primary emotion (e.g., Calm, Anxious, Stressed, Happy, Sad, Angry, Fearful) and secondary emotions.\nProvide granular scores (0-100%) for: stress level, anxiety level, energy level, and focus level.\nAlso provide a short, supportive 1-sentence response, and 2-3 actionable coping mechanisms tailored to their emotional state.\n\nText: "${text}"`
+                }
+            ],
+            response_format: { type: "json_object" }
+        });
+        res.json(JSON.parse(response.choices[0].message.content || "{}"));
+    } catch (error) {
+        console.error("Groq API Error (Emotion Analysis):", error);
+        res.status(500).json({ error: 'Failed to analyze emotion' });
+    }
+});
+
+app.post('/api/chat', async (req, res) => {
+    try {
+        const { message, history } = req.body;
+        
+        const messages: any[] = [
+            { role: "system", content: "You are SafeMind AI, a supportive, empathetic wellness and safety companion. Keep responses concise, helpful, and caring." }
+        ];
+        
+        history.forEach((msg: any) => {
+            messages.push({
+                role: msg.role === 'ai' ? 'assistant' : 'user',
+                content: msg.text
+            });
+        });
+        
+        messages.push({ role: 'user', content: message });
+
+        const response = await getGroq().chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: messages
+        });
+        
+        res.json({ text: response.choices[0].message.content });
+    } catch (error: any) {
+        console.error("Groq API Error (Chat):", error);
+        res.status(500).json({ error: 'Failed to generate chat response', details: error.message });
+    }
+});
 
 // --- Authentication ---
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -62,8 +137,6 @@ app.get('/auth/callback', async (req, res) => {
     
     if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
         console.log('Google OAuth not configured. Mocking login.');
-        profile.name = 'Mocked Google User';
-        profile.email = 'mocked@gmail.com';
         return res.send(`
             <html>
                 <body>
@@ -91,11 +164,6 @@ app.get('/auth/callback', async (req, res) => {
             audience: GOOGLE_CLIENT_ID,
         });
         const payload = ticket.getPayload();
-        
-        if (payload) {
-            profile.name = payload.name || profile.name;
-            profile.email = payload.email || profile.email;
-        }
 
         res.send(`
             <html>
@@ -119,45 +187,13 @@ app.get('/auth/callback', async (req, res) => {
 });
 // ----------------------
 
-app.get('/api/profile', (req, res) => {
-    res.json(profile);
-});
-
-app.post('/api/profile', (req, res) => {
-    profile = { ...profile, ...req.body };
-    res.json({ success: true, profile });
-});
-
-app.get('/api/journals', (req, res) => {
-    res.json(journals);
-});
-
-app.post('/api/journals', (req, res) => {
-    const { text, mood, date } = req.body;
-    if (!text) return res.status(400).json({ error: 'Text is required' });
-    
-    const newEntry = { id: Date.now(), date, text, mood };
-    journals.unshift(newEntry);
-    res.json({ success: true, entry: newEntry });
-});
-
-app.delete('/api/journals/:id', (req, res) => {
-    const id = parseInt(req.params.id);
-    journals = journals.filter(j => j.id !== id);
-    res.json({ success: true });
-});
-
-app.get('/api/incidents', (req, res) => {
-    res.json(incidents);
-});
-
 app.post('/api/sos', async (req, res) => {
-    const { lat, lng } = req.body;
+    const { lat, lng, profile } = req.body;
     
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;
     const twilioNumber = process.env.TWILIO_PHONE_NUMBER;
-    const toNumbers = profile.contacts.map(c => c.phone).filter(Boolean);
+    const toNumbers = profile?.contacts?.map((c: any) => c.phone).filter(Boolean) || [];
 
     if (!accountSid || !authToken || !twilioNumber) {
         // Mock success if Twilio is not configured
@@ -174,9 +210,9 @@ app.post('/api/sos', async (req, res) => {
             locationText = `https://maps.google.com/?q=${lat},${lng}`;
         }
         
-        const messageBody = `SOS ALERT from ${profile.name}! I need help. My current location is: ${locationText}`;
+        const messageBody = `SOS ALERT from ${profile?.name || 'a user'}! I need help. My current location is: ${locationText}`;
         
-        const promises = toNumbers.map(number => {
+        const promises = toNumbers.map((number: string) => {
             return client.messages.create({
                 body: messageBody,
                 from: twilioNumber,
@@ -193,20 +229,10 @@ app.post('/api/sos', async (req, res) => {
 });
 
 async function startServer() {
-    // Vite middleware for development
-    if (process.env.NODE_ENV !== 'production') {
-        const vite = await createViteServer({
-            server: { middlewareMode: true },
-            appType: 'spa',
-        });
-        app.use(vite.middlewares);
-    } else {
-        const distPath = path.join(process.cwd(), 'dist');
-        app.use(express.static(distPath));
-        app.get('*', (req, res) => {
-            res.sendFile(path.join(distPath, 'index.html'));
-        });
-    }
+    app.use(express.static(process.cwd()));
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(process.cwd(), 'index.html'));
+    });
 
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`Server running on http://localhost:${PORT}`);
