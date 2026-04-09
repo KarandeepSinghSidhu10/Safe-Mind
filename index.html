@@ -1277,6 +1277,22 @@
                 return;
             }
 
+            const simulateInput = (reason) => {
+                console.log(`Fallback to simulated voice input. Reason: ${reason}`);
+                micBtn.classList.add('listening');
+                statusText.textContent = "Simulating input...";
+                resultText.textContent = "Listening...";
+                
+                setTimeout(() => {
+                    resultText.textContent = "I've been feeling really overwhelmed and stressed out with work lately. It's hard to focus.";
+                    micBtn.classList.remove('listening');
+                    statusText.textContent = "Voice transcription complete. Analyzing emotion...";
+                    if (window.analyzeEmotionWithGemini) {
+                        window.analyzeEmotionWithGemini(resultText.textContent, prefix);
+                    }
+                }, 2500);
+            };
+
             try {
                 // Request microphone permission explicitly first
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1285,31 +1301,13 @@
             } catch (err) {
                 const errMsg = err.message || String(err);
                 console.error("Microphone access denied:", errMsg);
-                if (err.name === 'NotFoundError' || errMsg.includes('Requested device not found') || errMsg.includes('NotFoundError') || errMsg.includes('device not found')) {
-                    console.log("No microphone found. Using simulated voice input for testing.");
-                    micBtn.classList.add('listening');
-                    statusText.textContent = "No mic found. Simulating input...";
-                    resultText.textContent = "Listening...";
-                    
-                    setTimeout(() => {
-                        resultText.textContent = "I've been feeling really overwhelmed and stressed out with work lately. It's hard to focus.";
-                        micBtn.classList.remove('listening');
-                        statusText.textContent = "Voice transcription complete. Analyzing emotion...";
-                        if (window.analyzeEmotionWithGemini) {
-                            window.analyzeEmotionWithGemini(resultText.textContent, prefix);
-                        }
-                    }, 2500);
-                    return;
-                }
-                
-                statusText.textContent = "Microphone access denied.";
-                showToast('Microphone Blocked', 'Please allow microphone access in your browser settings to use voice features.', 'sos');
+                simulateInput(errMsg);
                 return;
             }
             
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
-                showToast('Error', 'Speech recognition is not supported in this browser.', 'sos');
+                simulateInput("Speech recognition not supported");
                 return;
             }
 
@@ -1336,12 +1334,8 @@
             recognition.onerror = function(event) {
                 console.error('Speech recognition error', event.error);
                 micBtn.classList.remove('listening');
-                if (event.error === 'not-allowed') {
-                    statusText.textContent = "Microphone access denied.";
-                    showToast('Microphone Blocked', 'Please allow microphone access in your browser settings to use voice features.', 'sos');
-                } else {
-                    statusText.textContent = "Error listening. Please try again.";
-                }
+                recognition.onend = null; // Prevent onend from firing
+                simulateInput(event.error);
             };
 
             recognition.onend = function() {
