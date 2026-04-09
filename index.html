@@ -893,7 +893,7 @@
     <div id="login-screen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 1000; display: flex; align-items: center; justify-content: center; flex-direction: column;">
         <div class="logo" style="font-size: 48px; margin-bottom: 20px;">SafeMind</div>
         <p style="color: var(--muted); margin-bottom: 40px; text-align: center; max-width: 300px;">Your personal safety and wellness companion.</p>
-        <button class="btn-primary" style="display: flex; align-items: center; gap: 10px; font-size: 16px; padding: 12px 24px;" onclick="loginWithGoogle()">
+        <button class="btn-primary" style="display: flex; align-items: center; gap: 10px; font-size: 16px; padding: 12px 24px;" onclick="window.login()">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -941,32 +941,7 @@
             );
         }
 
-        // Authentication
-        async function loginWithGoogle() {
-            try {
-                const res = await fetch('/api/auth/url');
-                const data = await res.json();
-                
-                const authWindow = window.open(data.url, 'oauth_popup', 'width=600,height=700');
-                
-                if (!authWindow) {
-                    showToast('Popup Blocked', 'Please allow popups to sign in with Google.', 'sos');
-                }
-            } catch (err) {
-                console.error('Failed to get auth URL', err);
-                showToast('Login Error', 'Failed to initiate login.', 'sos');
-            }
-        }
-
-        window.addEventListener('message', async (event) => {
-            if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
-                document.getElementById('login-screen').style.display = 'none';
-                await loadProfile();
-                await loadJournals();
-                await loadIncidents();
-                showToast('Welcome', `Signed in as ${document.getElementById('profile-name').value}`, 'info');
-            }
-        });
+        // Authentication handled by Firebase
 
         // Profile & Emergency Contacts
         let emergencyContacts = [];
@@ -976,7 +951,6 @@
             if (!user) return;
             try {
                 const docRef = window.doc(window.db(), 'users', user.uid);
-                const docSnap = await window.getDocs(window.query(window.collection(window.db(), 'users'))); // Just to check if we can read
                 
                 // We use onSnapshot for real-time updates
                 window.onSnapshot(docRef, (snapshot) => {
@@ -1102,14 +1076,15 @@
             const user = window.currentUser();
             if (!user) return;
             try {
-                const q = window.query(window.collection(window.db(), 'journals'));
+                const q = window.query(
+                    window.collection(window.db(), 'journals'),
+                    window.where('userId', '==', user.uid)
+                );
                 window.onSnapshot(q, (snapshot) => {
                     const entries = [];
                     snapshot.forEach((doc) => {
                         const data = doc.data();
-                        if (data.userId === user.uid) {
-                            entries.push({ id: doc.id, ...data });
-                        }
+                        entries.push({ id: doc.id, ...data });
                     });
                     // Sort by date descending
                     entries.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -1562,7 +1537,10 @@
 
         window.saveJournal = async function() {
             const user = window.currentUser();
-            if (!user) return;
+            if (!user) {
+                showToast('Error', 'Please sign in to save journals.', 'sos');
+                return;
+            }
             const input = document.getElementById('journal-input');
             const text = input.value.trim();
             if(!text) return;
@@ -1640,12 +1618,15 @@
 
         window.submitReport = async function() {
             const user = window.currentUser();
-            if (!user) return;
+            if (!user) {
+                showToast('Error', 'Please sign in to submit reports.', 'sos');
+                return;
+            }
             const activeTypeEl = document.querySelector('.report-type.active span');
             const activeType = activeTypeEl ? activeTypeEl.textContent : 'Other';
             const location = document.getElementById('report-location').value;
             const desc = document.getElementById('report-desc').value;
-            const anonymous = document.getElementById('report-anonymous').checked;
+            const anonymous = document.getElementById('anon').checked;
 
             if (!location || !desc) {
                 showToast('Error', 'Please fill in all required fields.', 'sos');
@@ -1668,7 +1649,7 @@
                 // Clear form
                 document.getElementById('report-location').value = '';
                 document.getElementById('report-desc').value = '';
-                document.getElementById('report-anonymous').checked = false;
+                document.getElementById('anon').checked = false;
             } catch (err) {
                 console.error('Failed to submit report', err);
                 showToast('Error', 'Failed to submit report.', 'sos');
@@ -2103,7 +2084,7 @@
     </script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getFirestore, collection, getDocs, getDoc, addDoc, deleteDoc, doc, updateDoc, setDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, getDoc, addDoc, deleteDoc, doc, updateDoc, setDoc, onSnapshot, query, orderBy, where } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
         let db;
@@ -2163,6 +2144,7 @@
         window.onSnapshot = onSnapshot;
         window.query = query;
         window.orderBy = orderBy;
+        window.where = where;
 
         window.analyzeIncidentWithGemini = async function(description) {
             const analysisContainer = document.getElementById('incident-ai-analysis');
